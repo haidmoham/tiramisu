@@ -2,7 +2,7 @@ import {
   normalizeCommentsResponse,
   selectMatchingSong,
   unavailableCommentsPayload,
-} from './core.js'
+} from '../../server/genius-comments/core.js'
 
 const GENIUS_API = 'https://api.genius.com'
 const GENIUS_WEB_API = 'https://genius.com/api/'
@@ -14,7 +14,7 @@ const COMMENTS_PER_PAGE = 20
  * Thin Vercel route for the comments spike. The Genius access token is read
  * only here and is never included in a response to the browser.
  */
-export default async function handler(request: Request): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
   if (request.method !== 'GET') return json({ error: 'Method not allowed.' }, 405, { Allow: 'GET' })
 
   const query = readQuery(request)

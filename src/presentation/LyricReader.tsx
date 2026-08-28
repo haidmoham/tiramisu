@@ -20,6 +20,8 @@ function clamp(value: number, minimum: number, maximum: number) {
 
 export function LyricReader({ document, state, className, onScrollProgress }: LyricReaderProps) {
   const readerRef = useRef<HTMLElement>(null)
+  const identityRef = useRef<HTMLDivElement>(null)
+  const lineRefs = useRef(new Map<LyricLine['id'], HTMLLIElement>())
   const progressCallbackRef = useRef(onScrollProgress)
 
   useEffect(() => {
@@ -34,6 +36,23 @@ export function LyricReader({ document, state, className, onScrollProgress }: Ly
       const bounds = reader.getBoundingClientRect()
       const scrollableDistance = Math.max(1, reader.offsetHeight - window.innerHeight)
       progressCallbackRef.current?.(clamp(-bounds.top / scrollableDistance, 0, 1))
+
+      const identity = identityRef.current
+      if (!identity || state.focusMode) return
+
+      const glass = identity.getBoundingClientRect()
+      const feather = Math.min(56, Math.max(32, glass.height * 0.18))
+
+      lineRefs.current.forEach((line) => {
+        const bounds = line.getBoundingClientRect()
+        const center = (bounds.top + bounds.bottom) / 2
+        const progress = clamp((center - glass.bottom) / feather, 0, 1)
+        // Once a line reaches the lower edge of the pinned identity it is
+        // fully beneath the glass. It deliberately stays hidden as it moves on.
+        const opacity = progress * progress * (3 - 2 * progress)
+
+        line.style.setProperty('--lyric-glass-opacity', opacity.toFixed(3))
+      })
     }
 
     const resizeObserver = new ResizeObserver(reportProgress)
@@ -45,7 +64,7 @@ export function LyricReader({ document, state, className, onScrollProgress }: Ly
       resizeObserver.disconnect()
       window.removeEventListener('scroll', reportProgress)
     }
-  }, [document])
+  }, [document, state.focusMode])
 
   const readerClassName = [
     'lyric-reader',
@@ -57,7 +76,7 @@ export function LyricReader({ document, state, className, onScrollProgress }: Ly
 
   return (
     <article ref={readerRef} className={readerClassName} aria-labelledby="lyric-reader-title">
-      <div className="lyric-reader__identity">
+      <div ref={identityRef} className="lyric-reader__identity">
         <header className="lyric-reader__header">
           <h1 id="lyric-reader-title" className="lyric-reader__artist">
             {document.track.artist}
@@ -71,6 +90,10 @@ export function LyricReader({ document, state, className, onScrollProgress }: Ly
       <ol className="lyric-reader__lines" aria-label={`lyrics for ${document.track.title}`}>
         {document.lines.map((line, index) => (
           <li
+            ref={(element) => {
+              if (element) lineRefs.current.set(line.id, element)
+              else lineRefs.current.delete(line.id)
+            }}
             key={line.id}
             id={`lyric-line-${line.id}`}
             className="lyric-reader__line"

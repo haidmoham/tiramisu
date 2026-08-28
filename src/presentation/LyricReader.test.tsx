@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { LyricDocument } from '../domain'
 import { LyricReader } from './LyricReader'
@@ -43,5 +43,26 @@ describe('LyricReader', () => {
 
     expect(container.querySelector('.lyric-reader')).toHaveClass('lyric-reader--focus')
     expect(container.querySelector('#lyric-line-two')).toHaveAttribute('aria-current', 'true')
+  })
+
+  it('fades a line one-way beneath the fixed identity glass', () => {
+    const { container } = render(<LyricReader document={document} state={{ focusMode: false }} />)
+    const identity = container.querySelector('.lyric-reader__identity') as HTMLDivElement
+    const line = container.querySelector('.lyric-reader__line') as HTMLLIElement
+
+    identity.getBoundingClientRect = () =>
+      ({ top: 64, bottom: 360, height: 296 }) as DOMRect
+    line.getBoundingClientRect = () =>
+      ({ top: 320, bottom: 350 }) as DOMRect
+
+    fireEvent.scroll(window)
+
+    expect(line.style.getPropertyValue('--lyric-glass-opacity')).toBe('0.000')
+
+    line.getBoundingClientRect = () =>
+      ({ top: 430, bottom: 470 }) as DOMRect
+    fireEvent.scroll(window)
+
+    expect(line.style.getPropertyValue('--lyric-glass-opacity')).toBe('1.000')
   })
 })

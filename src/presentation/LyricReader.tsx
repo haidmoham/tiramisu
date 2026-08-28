@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { LyricDocument, LyricLine } from '../domain/lyrics'
+import { resolveActiveLyricIndex } from './lyricProgress'
 
 /** The small state surface the app can own without coupling the reader to lookup. */
 export interface PresentationState {
@@ -11,39 +12,72 @@ export interface LyricReaderProps {
   document: LyricDocument
   state: PresentationState
   className?: string
-  onScrollProgress?: (progress: number) => void
+  onActiveLineChange?: (lineId: LyricLine['id']) => void
 }
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(Math.max(value, minimum), maximum)
 }
 
-export function LyricReader({ document, state, className, onScrollProgress }: LyricReaderProps) {
+export function LyricReader({
+  document,
+  state,
+  className,
+  onActiveLineChange,
+}: LyricReaderProps) {
   const readerRef = useRef<HTMLElement>(null)
   const identityRef = useRef<HTMLDivElement>(null)
+  const tailRef = useRef<HTMLDivElement>(null)
   const lineRefs = useRef(new Map<LyricLine['id'], HTMLLIElement>())
-  const progressCallbackRef = useRef(onScrollProgress)
+  const activeLineCallbackRef = useRef(onActiveLineChange)
+  const lastReportedLineRef = useRef<LyricLine['id'] | undefined>(undefined)
 
   useEffect(() => {
-    progressCallbackRef.current = onScrollProgress
-  }, [onScrollProgress])
+    activeLineCallbackRef.current = onActiveLineChange
+  }, [onActiveLineChange])
 
   useEffect(() => {
     const reader = readerRef.current
     if (!reader) return undefined
+    lastReportedLineRef.current = undefined
 
     const reportProgress = () => {
-      const bounds = reader.getBoundingClientRect()
-      const scrollableDistance = Math.max(1, reader.offsetHeight - window.innerHeight)
-      progressCallbackRef.current?.(clamp(-bounds.top / scrollableDistance, 0, 1))
-
       const identity = identityRef.current
-      if (!identity || state.focusMode) return
+      if (!identity) return
 
       const glass = identity.getBoundingClientRect()
+      const anchor = state.focusMode
+        ? Math.max(72, Math.min(window.innerHeight * 0.18, 160))
+        : glass.bottom + 8
+      const lines = document.lines
+        .map((line) => lineRefs.current.get(line.id))
+        .filter((line): line is HTMLLIElement => Boolean(line))
+      const lineBounds = lines.map((line) => line.getBoundingClientRect())
+      const activeIndex = resolveActiveLyricIndex(lineBounds, anchor)
+      const activeLineId = document.lines[activeIndex]?.id
+
+      if (activeLineId && activeLineId !== lastReportedLineRef.current) {
+        lastReportedLineRef.current = activeLineId
+        activeLineCallbackRef.current?.(activeLineId)
+      }
+
+      const tail = tailRef.current
+      const lastBounds = lineBounds.at(-1)
+      if (tail && lastBounds) {
+        const readerPaddingBottom = Number.parseFloat(getComputedStyle(reader).paddingBottom) || 0
+        const tailHeight = Math.max(
+          96,
+          window.innerHeight - anchor - (lastBounds.bottom - lastBounds.top) - readerPaddingBottom,
+        )
+        const nextTailHeight = `${Math.round(tailHeight)}px`
+        if (tail.style.blockSize !== nextTailHeight) tail.style.blockSize = nextTailHeight
+      }
+
+      if (state.focusMode) return
+
       const feather = Math.min(56, Math.max(32, glass.height * 0.18))
 
-      lineRefs.current.forEach((line) => {
+      lines.forEach((line) => {
         const bounds = line.getBoundingClientRect()
         const center = (bounds.top + bounds.bottom) / 2
         const progress = clamp((center - glass.bottom) / feather, 0, 1)
@@ -114,6 +148,8 @@ export function LyricReader({ document, state, className, onScrollProgress }: Ly
           </li>
         ))}
       </ol>
+
+      <div ref={tailRef} className="lyric-reader__tail" aria-hidden="true" />
 
     </article>
   )

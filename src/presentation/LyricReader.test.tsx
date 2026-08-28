@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { LyricDocument } from '../domain'
 import { LyricReader } from './LyricReader'
+import { resolveActiveLyricIndex } from './lyricProgress'
 
 const document: LyricDocument = {
   track: {
@@ -18,6 +19,18 @@ const document: LyricDocument = {
 }
 
 describe('LyricReader', () => {
+  it('selects the first lyric whose top edge has cleared the pinned glass', () => {
+    const lineBounds = [
+      { top: 184, bottom: 292 },
+      { top: 328, bottom: 432 },
+      { top: 478, bottom: 570 },
+    ]
+
+    expect(resolveActiveLyricIndex(lineBounds, 120)).toBe(0)
+    expect(resolveActiveLyricIndex(lineBounds, 360)).toBe(2)
+    expect(resolveActiveLyricIndex(lineBounds, 620)).toBe(2)
+  })
+
   it('renders a semantic lyric document without provider response fields', () => {
     render(<LyricReader document={document} state={{ focusMode: false }} />)
 

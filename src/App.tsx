@@ -272,15 +272,6 @@ function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
 
   const document = state.document?.track.id === trackId ? state.document : null
 
-  const onScrollProgress = useCallback(
-    (progress: number) => {
-      if (!document) return
-      const index = Math.min(document.lines.length - 1, Math.floor(progress * document.lines.length))
-      setActiveLineId(document.lines[Math.max(0, index)]?.id)
-    },
-    [document],
-  )
-
   if (state.selectedTrackId === trackId && state.lyricsStatus === 'error') {
     return (
       <main className="reader-state">
@@ -305,6 +296,10 @@ function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
     )
   }
 
+  const presentedActiveLineId = document.lines.some((line) => line.id === activeLineId)
+    ? activeLineId
+    : document.lines[0]?.id
+
   return (
     <main className="reader-view" data-focus={focusMode} data-canvas={canvasAvailable}>
       {canvasAvailable ? <AmbientLayer onFallback={() => setCanvasAvailable(false)} /> : null}
@@ -317,8 +312,8 @@ function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
       </nav>
       <LyricReader
         document={document}
-        state={{ focusMode, activeLineId }}
-        onScrollProgress={onScrollProgress}
+        state={{ focusMode, activeLineId: presentedActiveLineId }}
+        onActiveLineChange={setActiveLineId}
       />
     </main>
   )

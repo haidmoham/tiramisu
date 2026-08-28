@@ -212,8 +212,53 @@ test.describe('search UX', () => {
     expect(readerMetrics.scrollWidth).toBeLessThanOrEqual(readerMetrics.clientWidth)
     expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeGreaterThan(844)
 
-    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
-    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
+    for (const fraction of [0, 0.5, 1]) {
+      await page.evaluate((scrollFraction) => {
+        const scrollDistance = document.documentElement.scrollHeight - window.innerHeight
+        window.scrollTo(0, scrollDistance * scrollFraction)
+      }, fraction)
+
+      await expect.poll(() => page.evaluate((scrollFraction) => {
+        const identity = document.querySelector('.lyric-reader__identity')
+        const lines = [...document.querySelectorAll('.lyric-reader__line')]
+        if (!identity || lines.length === 0) return null
+
+        const anchor = identity.getBoundingClientRect().bottom + 8
+        const activeIndex = lines.findIndex((line) => line.getAttribute('aria-current') === 'true')
+        const anchoredIndex = lines.findIndex((line) => line.getBoundingClientRect().top >= anchor)
+
+        return {
+          activeIndex,
+          anchoredIndex: anchoredIndex === -1 ? lines.length - 1 : anchoredIndex,
+          aligned: activeIndex === (anchoredIndex === -1 ? lines.length - 1 : anchoredIndex),
+          atBoundary: scrollFraction === 0
+            ? activeIndex === 0
+            : scrollFraction === 1
+              ? activeIndex === lines.length - 1
+              : true,
+          lineCount: lines.length,
+          activeTop: lines[activeIndex]?.getBoundingClientRect().top ?? Number.NEGATIVE_INFINITY,
+          anchor,
+        }
+      }, fraction)).toMatchObject({
+        aligned: true,
+        atBoundary: true,
+      })
+
+      const anchoredState = await page.evaluate(() => {
+        const identity = document.querySelector('.lyric-reader__identity')
+        const activeLine = document.querySelector('.lyric-reader__line[aria-current="true"]')
+        return identity && activeLine
+          ? {
+              activeTop: activeLine.getBoundingClientRect().top,
+              anchor: identity.getBoundingClientRect().bottom + 8,
+            }
+          : null
+      })
+      expect((anchoredState?.activeTop ?? 0) + 1).toBeGreaterThanOrEqual(anchoredState?.anchor ?? 0)
+    }
+
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
 
     const focusToggle = page.locator('.focus-mode-toggle')
     await focusToggle.click()

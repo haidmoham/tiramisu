@@ -107,6 +107,11 @@ function SearchView({
 }: SearchViewProps) {
   const navigate = useNavigate()
   const isLoading = status === 'loading'
+  const resultCount = status === 'ready'
+    ? query
+      ? `${results.length} ${results.length === 1 ? 'match' : 'matches'}`
+      : `${results.length} lyric ${results.length === 1 ? 'sheet' : 'sheets'}`
+    : ''
 
   return (
     <main className="search-view">
@@ -174,7 +179,10 @@ function SearchView({
         >
           <div className="result-shelf__heading">
             <h2 id="result-heading">{query ? 'results' : 'lyrics'}</h2>
-            <span>{status === 'ready' ? `${results.length} ${query ? 'matches' : ''}`.trim() : ''}</span>
+            <span className="result-shelf__count">
+              {resultCount ? <span className="result-shelf__count-dot" aria-hidden="true" /> : null}
+              {resultCount}
+            </span>
           </div>
 
           <p className="sr-only" role="status" aria-live="polite">

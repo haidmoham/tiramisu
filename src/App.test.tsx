@@ -56,6 +56,12 @@ describe('App routing and lookup states', () => {
     expect(screen.getByText('[Licensed lyrics are not loaded in this preview.]')).toBeInTheDocument()
   })
 
+  it('labels the default shelf count instead of showing an unexplained number', async () => {
+    renderApp()
+
+    expect(await screen.findByText('3 lyric sheets')).toBeVisible()
+  })
+
   it('renders a deliberate no-results state', async () => {
     const user = userEvent.setup()
     renderApp()

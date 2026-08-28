@@ -124,6 +124,7 @@ test.describe('search UX', () => {
     await openSearch(page)
 
     await expect(page.getByRole('heading', { name: 'lyrics' })).toBeVisible()
+    await expect(page.getByText('3 lyric sheets')).toBeVisible()
     await expect(page.getByRole('button', { name: /This Modern Love/ })).toBeVisible()
     await expect(page.getByRole('button', { name: /Melancholy/ })).toBeVisible()
     await expect(page.getByRole('button', { name: /cbd/ })).toBeVisible()
@@ -132,6 +133,7 @@ test.describe('search UX', () => {
     await input.fill('modern')
     await page.getByRole('button', { name: 'Look up' }).click()
     await expect(page.getByRole('button', { name: /Looking/ })).toBeDisabled()
+    await expect(page.getByText('1 match')).toBeVisible()
     await expect(page.getByRole('button', { name: /QA Signal/ })).toBeVisible()
 
     await page.getByRole('button', { name: /QA Signal/ }).click()

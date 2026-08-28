@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import type { Dispatch } from 'react'
 import { Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom'
-import type { LyricsProvider, TrackSummary } from './domain'
+import type { LyricsProvider, LyricsSearchField, TrackSummary } from './domain'
 import { initialLookupState, lookupReducer } from './app/lookupReducer'
 import { TiramisuLyricsProvider } from './lookup'
 import type { AmbientCanvasProps } from './presentation/AmbientCanvas'
@@ -31,10 +31,11 @@ export interface AppProps {
 
 function App({ provider = defaultProvider }: AppProps) {
   const [state, dispatch] = useReducer(lookupReducer, initialLookupState)
+  const [searchField, setSearchField] = useState<LyricsSearchField>('smart')
   const searchRequestId = useRef(0)
   const searchController = useRef<AbortController | null>(null)
 
-  const search = useCallback(async (query: string) => {
+  const search = useCallback(async (query: string, field: LyricsSearchField = 'smart') => {
     searchController.current?.abort()
     const controller = new AbortController()
     const requestId = ++searchRequestId.current
@@ -42,7 +43,7 @@ function App({ provider = defaultProvider }: AppProps) {
     dispatch({ type: 'searchStarted', requestId })
 
     try {
-      const results = await provider.search(query, controller.signal)
+      const results = await provider.search(query, controller.signal, field)
       dispatch({ type: 'searchSucceeded', requestId, results })
     } catch (error) {
       if (isAbortError(error)) return
@@ -65,7 +66,9 @@ function App({ provider = defaultProvider }: AppProps) {
             status={state.searchStatus}
             results={state.results}
             error={state.searchError}
+            searchField={searchField}
             onQueryChange={(query) => dispatch({ type: 'queryChanged', query })}
+            onSearchFieldChange={setSearchField}
             onSearch={search}
           />
         }
@@ -84,8 +87,10 @@ interface SearchViewProps {
   status: 'idle' | 'loading' | 'ready' | 'error'
   results: readonly TrackSummary[]
   error: string | null
+  searchField: LyricsSearchField
   onQueryChange: (query: string) => void
-  onSearch: (query: string) => Promise<void>
+  onSearchFieldChange: (field: LyricsSearchField) => void
+  onSearch: (query: string, field: LyricsSearchField) => Promise<void>
 }
 
 function SearchView({
@@ -93,7 +98,9 @@ function SearchView({
   status,
   results,
   error,
+  searchField,
   onQueryChange,
+  onSearchFieldChange,
   onSearch,
 }: SearchViewProps) {
   const navigate = useNavigate()
@@ -118,12 +125,27 @@ function SearchView({
             role="search"
             onSubmit={(event) => {
               event.preventDefault()
-              void onSearch(query)
+              void onSearch(query, searchField)
             }}
           >
             <label className="search-form__label" htmlFor="lyric-search">
               Search the lyric sheets
             </label>
+            <fieldset className="search-form__modes">
+              <legend>Search by</legend>
+              {SEARCH_FIELDS.map(({ value, label, note }) => (
+                <label className="search-form__mode" key={value} title={note}>
+                  <input
+                    type="radio"
+                    name="search-field"
+                    value={value}
+                    checked={searchField === value}
+                    onChange={() => onSearchFieldChange(value)}
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </fieldset>
             <div className="search-form__field">
               <input
                 id="lyric-search"
@@ -150,11 +172,15 @@ function SearchView({
         >
           <div className="result-shelf__heading">
             <h2 id="result-heading">{query ? 'results' : 'lyrics'}</h2>
-            <span>{status === 'ready' ? `${results.length}` : ''}</span>
+            <span>{status === 'ready' ? `${results.length} ${query ? 'matches' : ''}`.trim() : ''}</span>
           </div>
 
           <p className="sr-only" role="status" aria-live="polite">
-            {isLoading ? 'looking for lyrics' : status === 'ready' ? `${results.length} results` : ''}
+            {isLoading
+              ? `Looking for ${query || 'lyrics'}.`
+              : status === 'ready'
+                ? `${results.length} ${query ? `matches for “${query}”` : 'lyric sheets'}. Select a result to open its lyric sheet.`
+                : ''}
           </p>
 
           {status === 'error' ? (
@@ -167,7 +193,7 @@ function SearchView({
           {status === 'ready' && results.length === 0 ? (
             <div className="lookup-message">
               <p>No lyric sheet matched “{query}”.</p>
-              <button type="button" onClick={() => void onSearch('')}>Show all</button>
+              <button type="button" onClick={() => void onSearch('', searchField)}>Show all</button>
             </div>
           ) : null}
 
@@ -198,6 +224,16 @@ function SearchView({
     </main>
   )
 }
+
+const SEARCH_FIELDS: readonly {
+  value: LyricsSearchField
+  label: string
+  note: string
+}[] = [
+  { value: 'smart', label: 'Smart', note: 'Balances title and artist matches.' },
+  { value: 'title', label: 'Title', note: 'Uses LRCLIB title retrieval and title-first ranking.' },
+  { value: 'artist', label: 'Artist', note: 'Prioritizes artist matches in the catalog.' },
+]
 
 type AppState = ReturnType<typeof lookupReducer>
 type AppDispatch = Dispatch<Parameters<typeof lookupReducer>[1]>

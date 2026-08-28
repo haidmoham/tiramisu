@@ -58,6 +58,62 @@ describe('TiramisuLyricsProvider', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  it('promotes the artist match when a title-and-artist query is poorly ordered upstream', async () => {
+    const upstreamResults: TrackSummary[] = [
+      {
+        id: 'lrclib:1',
+        title: 'Fear Not',
+        artist: 'Another Artist',
+        collection: 'Elsewhere',
+        source: 'lrclib',
+      },
+      {
+        id: 'lrclib:2',
+        title: 'Far',
+        artist: 'SZA',
+        collection: 'SOS',
+        source: 'lrclib',
+      },
+    ]
+    const primary = stubProvider({
+      search: vi.fn(async () => upstreamResults),
+    })
+    const provider = new TiramisuLyricsProvider({ primary, fallback: stubProvider(), fetch: vi.fn() })
+
+    const results = await provider.search('fear sza')
+
+    expect(results.map(({ id }) => id)).toEqual(['lrclib:2', 'lrclib:1'])
+  })
+
+  it('uses the selected search field for retrieval and ranking', async () => {
+    const upstreamResults: TrackSummary[] = [
+      {
+        id: 'lrclib:1',
+        title: 'Fear Not',
+        artist: 'Another Artist',
+        collection: 'Elsewhere',
+        source: 'lrclib',
+      },
+      {
+        id: 'lrclib:2',
+        title: 'Far',
+        artist: 'SZA',
+        collection: 'SOS',
+        source: 'lrclib',
+      },
+    ]
+    const primary = stubProvider({ search: vi.fn(async () => upstreamResults) })
+    const provider = new TiramisuLyricsProvider({ primary, fallback: stubProvider(), fetch: vi.fn() })
+
+    const titleResults = await provider.search('fear sza', undefined, 'title')
+    const artistResults = await provider.search('fear sza', undefined, 'artist')
+
+    expect(titleResults[0]).toMatchObject({ id: 'lrclib:1' })
+    expect(artistResults[0]).toMatchObject({ id: 'lrclib:2' })
+    expect(primary.search).toHaveBeenNthCalledWith(1, 'fear sza', undefined, 'title')
+    expect(primary.search).toHaveBeenNthCalledWith(2, 'fear sza', undefined, 'artist')
+  })
+
   it('turns metadata suggestions into stable fallback results when LRCLIB is empty', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue({
       ok: true,

@@ -10,6 +10,9 @@ export interface TrackSummary {
 /** The origin of lyric text. More provider kinds can be added without changing consumers. */
 export type LyricsSource = 'fixture' | 'lrclib' | 'lrcmux'
 
+/** The lookup lens applied to a free-text query. */
+export type LyricsSearchField = 'smart' | 'title' | 'artist'
+
 /** One displayed line in a lyric document. */
 export interface LyricLine {
   id: string
@@ -24,6 +27,10 @@ export interface LyricDocument {
 
 /** The lookup boundary used by the application, independent of any lyric service. */
 export interface LyricsProvider {
-  search(query: string, signal?: AbortSignal): Promise<readonly TrackSummary[]>
+  search(
+    query: string,
+    signal?: AbortSignal,
+    field?: LyricsSearchField,
+  ): Promise<readonly TrackSummary[]>
   getLyrics(id: string, signal?: AbortSignal): Promise<LyricDocument>
 }

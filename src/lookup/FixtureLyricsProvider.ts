@@ -1,6 +1,7 @@
 import type {
   LyricDocument,
   LyricsProvider,
+  LyricsSearchField,
   TrackSummary,
 } from '../domain'
 
@@ -65,7 +66,11 @@ export class FixtureLyricsProvider implements LyricsProvider {
     this.#latencyMs = latencyMs
   }
 
-  async search(query: string, signal?: AbortSignal): Promise<readonly TrackSummary[]> {
+  async search(
+    query: string,
+    signal?: AbortSignal,
+    _field?: LyricsSearchField,
+  ): Promise<readonly TrackSummary[]> {
     await wait(this.#latencyMs, signal)
     this.#throwIfFailureTrigger(query)
 

@@ -1,6 +1,7 @@
 import type {
   LyricDocument,
   LyricsProvider,
+  LyricsSearchField,
   TrackSummary,
 } from '../domain'
 
@@ -142,7 +143,11 @@ export class LrcMuxLyricsProvider implements LyricsProvider {
    * LrcMux has no catalog-search responsibility in this application.
    * Returning no candidates keeps it safe to include in a composite provider.
    */
-  async search(_query: string, signal?: AbortSignal): Promise<readonly TrackSummary[]> {
+  async search(
+    _query: string,
+    signal?: AbortSignal,
+    _field?: LyricsSearchField,
+  ): Promise<readonly TrackSummary[]> {
     throwIfAborted(signal)
     return []
   }

@@ -1,6 +1,7 @@
 import type {
   LyricDocument,
   LyricsProvider,
+  LyricsSearchField,
   TrackSummary,
 } from '../domain'
 
@@ -89,11 +90,23 @@ export class LrcLibLyricsProvider implements LyricsProvider {
     this.#maxResults = Math.min(maxResults, MAX_LRCLIB_RESULT_COUNT)
   }
 
-  async search(query: string, signal?: AbortSignal): Promise<readonly TrackSummary[]> {
+  async search(
+    query: string,
+    signal?: AbortSignal,
+    field: LyricsSearchField = 'smart',
+  ): Promise<readonly TrackSummary[]> {
     throwIfAborted(signal)
 
     const url = this.#url('search')
-    url.searchParams.set('q', query.trim())
+    const normalizedQuery = query.trim()
+    if (field === 'title') {
+      url.searchParams.set('track_name', normalizedQuery)
+    } else {
+      // LRCLIB's public search API has no artist-only parameter without a
+      // title. Keep keyword retrieval for artist mode, then let the aggregate
+      // provider make artist matches the strongest results.
+      url.searchParams.set('q', normalizedQuery)
+    }
     const payload = await this.#requestJson(url, signal)
 
     if (!Array.isArray(payload)) {

@@ -58,6 +58,25 @@ describe('LrcLibLyricsProvider', () => {
     expect(tracks).toHaveLength(2)
   })
 
+  it('uses LRCLIB structured title retrieval while artist mode keeps its keyword endpoint', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response([result(104)]))
+    const provider = new LrcLibLyricsProvider({ fetch })
+
+    await provider.search('Fear SZA', undefined, 'title')
+    await provider.search('Fear SZA', undefined, 'artist')
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ href: 'https://lrclib.net/api/search?track_name=Fear+SZA' }),
+      expect.anything(),
+    )
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ href: 'https://lrclib.net/api/search?q=Fear+SZA' }),
+      expect.anything(),
+    )
+  })
+
   it('uses the public default result bound when no count is supplied', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
       response(Array.from({ length: DEFAULT_LRCLIB_RESULT_COUNT + 3 }, (_, index) => result(index))),

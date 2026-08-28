@@ -1,0 +1,46 @@
+:root {
+  --paper: #fff7df;
+  --paper-light: #fffaf0;
+  --paper-deep: #f5df9a;
+  --ink: #151044;
+  --ink-soft: #403a67;
+  --ink-faint: #706a91;
+  --line: rgb(21 16 68 / 22%);
+  --glass: rgb(255 247 223 / 82%);
+  --shadow: rgb(21 16 68 / 18%);
+  --red: #ff4b35;
+  --orange: #ff8b21;
+  --yellow: #ffe94c;
+  --blue: #2754e9;
+  --violet: #7a38d9;
+  --teal: #00b9a1;
+  --font-display: 'Newsreader Variable', 'Iowan Old Style', 'Baskerville', serif;
+  --font-ui: 'Manrope Variable', 'Helvetica Neue', sans-serif;
+  --font-serif: var(--font-display);
+  --font-sans: var(--font-ui);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  color: var(--ink);
+  background: var(--paper);
+  font-family: var(--font-ui);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+body * { text-transform: lowercase; }
+html { min-width: 320px; min-height: 100%; background: var(--paper); scroll-behavior: smooth; }
+body { min-width: 320px; min-height: 100%; margin: 0; background: var(--paper); overscroll-behavior-y: none; text-transform: lowercase; }
+body, button, input { font: inherit; }
+button, input { color: inherit; }
+button { -webkit-tap-highlight-color: transparent; }
+button, a, input { touch-action: manipulation; }
+a { color: inherit; }
+img, svg, canvas { display: block; max-width: 100%; }
+#root { min-height: 100svh; }
+::selection { color: var(--ink); background: var(--yellow); }
+:focus-visible { outline: 3px solid var(--red); outline-offset: 4px; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }

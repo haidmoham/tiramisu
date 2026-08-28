@@ -4,6 +4,8 @@ import { Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-rou
 import type { LyricsProvider, LyricsSearchField, TrackSummary } from './domain'
 import { initialLookupState, lookupReducer } from './app/lookupReducer'
 import { TiramisuLyricsProvider } from './lookup'
+import { CommentsPanel } from './comments/CommentsPanel'
+import type { CommentsStatus, GeniusComment, GeniusCommentsResponse } from './comments/CommentsPanel'
 import type { AmbientCanvasProps } from './presentation/AmbientCanvas'
 import { FocusModeToggle } from './presentation/FocusModeToggle'
 import { LyricReader } from './presentation/LyricReader'
@@ -244,6 +246,19 @@ interface LyricsViewProps {
   dispatch: AppDispatch
 }
 
+interface TrackCommentsState {
+  trackId?: string
+  mode: 'lyrics' | 'comments'
+  status: CommentsStatus
+  response: GeniusCommentsResponse | null
+}
+
+const initialTrackCommentsState: TrackCommentsState = {
+  mode: 'lyrics',
+  status: 'idle',
+  response: null,
+}
+
 function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
   const { trackId } = useParams()
   const navigate = useNavigate()
@@ -251,6 +266,10 @@ function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
   const [focusMode, setFocusMode] = useState(false)
   const [activeLineId, setActiveLineId] = useState<string | undefined>()
   const [canvasAvailable, setCanvasAvailable] = useState(true)
+  const [trackComments, setTrackComments] = useState<TrackCommentsState>(initialTrackCommentsState)
+  const commentsController = useRef<AbortController | null>(null)
+  const commentsRequestId = useRef(0)
+  const lyricScrollPosition = useRef(0)
 
   useEffect(() => {
     if (!trackId) return undefined
@@ -269,6 +288,14 @@ function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
 
     return () => controller.abort()
   }, [dispatch, provider, trackId])
+
+  useEffect(() => {
+    commentsController.current?.abort()
+    commentsController.current = null
+    commentsRequestId.current += 1
+
+    return () => commentsController.current?.abort()
+  }, [trackId])
 
   const document = state.document?.track.id === trackId ? state.document : null
 
@@ -299,6 +326,72 @@ function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
   const presentedActiveLineId = document.lines.some((line) => line.id === activeLineId)
     ? activeLineId
     : document.lines[0]?.id
+  const comments = trackComments.trackId === trackId ? trackComments : initialTrackCommentsState
+
+  const fetchComments = async (page: number) => {
+    if (!trackId) return
+
+    commentsController.current?.abort()
+    const controller = new AbortController()
+    const requestId = ++commentsRequestId.current
+    commentsController.current = controller
+    setTrackComments((previous) => ({
+      trackId,
+      mode: 'comments',
+      status: 'loading',
+      response: page === 1 ? null : previous.trackId === trackId ? previous.response : null,
+    }))
+
+    try {
+      const params = new URLSearchParams({
+        title: document.track.title,
+        artist: document.track.artist,
+        page: String(page),
+      })
+      const response = await fetch(`/api/genius-comments?${params}`, { signal: controller.signal })
+      if (!response.ok) throw new Error('Comments request failed.')
+      const payload = normalizeCommentsResponse(await response.json())
+
+      if (controller.signal.aborted || commentsRequestId.current !== requestId) return
+      setTrackComments((previous) => {
+        const prior = previous.trackId === trackId ? previous.response : null
+        return {
+          trackId,
+          mode: 'comments',
+          status: 'ready',
+          response: page === 1
+            ? payload
+            : {
+                ...payload,
+                comments: mergeComments(prior?.comments ?? [], payload.comments),
+                songUrl: payload.songUrl ?? prior?.songUrl,
+              },
+        }
+      })
+    } catch (error) {
+      if (isAbortError(error) || controller.signal.aborted) return
+      if (commentsRequestId.current !== requestId) return
+      setTrackComments({ trackId, mode: 'comments', status: 'error', response: null })
+    }
+  }
+
+  const showLyrics = () => {
+    setTrackComments((previous) => ({ ...previous, trackId, mode: 'lyrics' }))
+    requestAnimationFrame(() => window.scrollTo({ top: lyricScrollPosition.current, behavior: 'auto' }))
+  }
+
+  const showComments = () => {
+    if (focusMode) return
+    lyricScrollPosition.current = window.scrollY
+    setTrackComments((previous) => ({ ...previous, trackId, mode: 'comments' }))
+    window.scrollTo({ top: 0, behavior: 'auto' })
+    if (comments.status === 'idle') void fetchComments(1)
+  }
+
+  const setFocus = (nextFocused: boolean) => {
+    if (nextFocused && comments.mode === 'comments') showLyrics()
+    setFocusMode(nextFocused)
+  }
 
   return (
     <main className="reader-view" data-focus={focusMode} data-canvas={canvasAvailable}>
@@ -308,15 +401,87 @@ function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
           <span aria-hidden="true">←</span>
           <span>Search</span>
         </button>
-        <FocusModeToggle isFocused={focusMode} onToggle={setFocusMode} />
+        <div className="reader-tools__end">
+          {!focusMode ? (
+            <div className="reader-mode-toggle" role="tablist" aria-label="Reader view">
+              <button
+                id="reader-mode-lyrics"
+                type="button"
+                role="tab"
+                aria-selected={comments.mode === 'lyrics'}
+                aria-controls="reader-lyrics-panel"
+                onClick={showLyrics}
+              >
+                Lyrics
+              </button>
+              <button
+                id="reader-mode-comments"
+                type="button"
+                role="tab"
+                aria-selected={comments.mode === 'comments'}
+                aria-controls="reader-comments-panel"
+                onClick={showComments}
+              >
+                Comments
+              </button>
+            </div>
+          ) : null}
+          <FocusModeToggle isFocused={focusMode} onToggle={setFocus} />
+        </div>
       </nav>
-      <LyricReader
-        document={document}
-        state={{ focusMode, activeLineId: presentedActiveLineId }}
-        onActiveLineChange={setActiveLineId}
-      />
+      <section
+        id="reader-lyrics-panel"
+        role="tabpanel"
+        aria-labelledby="reader-mode-lyrics"
+        hidden={!focusMode && comments.mode !== 'lyrics'}
+      >
+        <LyricReader
+          document={document}
+          state={{ focusMode, activeLineId: presentedActiveLineId }}
+          onActiveLineChange={setActiveLineId}
+        />
+      </section>
+      {!focusMode ? (
+        <CommentsPanel
+          status={comments.status}
+          response={comments.response}
+          hidden={comments.mode !== 'comments'}
+          onLoadMore={() => {
+            if (comments.response?.nextPage) void fetchComments(comments.response.nextPage)
+          }}
+        />
+      ) : null}
     </main>
   )
+}
+
+function normalizeCommentsResponse(value: unknown): GeniusCommentsResponse {
+  if (!value || typeof value !== 'object') throw new Error('Invalid comments response.')
+  const record = value as Record<string, unknown>
+  if (!Array.isArray(record.comments)) throw new Error('Invalid comments response.')
+
+  return {
+    songUrl: typeof record.songUrl === 'string' ? record.songUrl : undefined,
+    commentsUnavailable: record.commentsUnavailable === true,
+    comments: record.comments.flatMap((comment): GeniusComment[] => {
+      if (!comment || typeof comment !== 'object') return []
+      const item = comment as Record<string, unknown>
+      if (typeof item.id !== 'string' || typeof item.body !== 'string' || typeof item.author !== 'string') return []
+      return [{
+        id: item.id,
+        body: item.body,
+        author: item.author,
+        avatarUrl: typeof item.avatarUrl === 'string' ? item.avatarUrl : undefined,
+        score: typeof item.score === 'number' ? item.score : undefined,
+      }]
+    }),
+    nextPage: typeof record.nextPage === 'number' && record.nextPage > 0 ? record.nextPage : undefined,
+  }
+}
+
+function mergeComments(existing: GeniusComment[], incoming: GeniusComment[]) {
+  const knownIds = new Set(existing.map((comment) => comment.id))
+  return [...existing, ...incoming.filter((comment) => !knownIds.has(comment.id))]
 }
 
 function isAbortError(error: unknown): boolean {

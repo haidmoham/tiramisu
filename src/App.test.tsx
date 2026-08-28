@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
@@ -34,6 +34,8 @@ vi.mock('./presentation/LyricReader', () => ({
     </article>
   ),
 }))
+
+vi.stubGlobal('scrollTo', vi.fn())
 
 function renderApp(path = '/') {
   return render(
@@ -76,5 +78,66 @@ describe('App routing and lookup states', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load lyrics.')
     expect(screen.getByRole('searchbox')).toBeInTheDocument()
+  })
+
+  it('loads Genius comments only when the reader opens comments', async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      songUrl: 'https://genius.com/Bloc-party-this-modern-love-lyrics',
+      comments: [{ id: '1', body: 'A plain old song note.', author: 'Mina', score: 2 }],
+    }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    renderApp()
+
+    await user.click(await screen.findByRole('button', { name: /This Modern Love/ }))
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('tab', { name: 'Comments' }))
+
+    expect(await screen.findByText('A plain old song note.')).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('/api/genius-comments?')
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('title=This+Modern+Love')
+    expect(screen.getByRole('link', { name: /Comments from Genius/ })).toHaveAttribute(
+      'href',
+      'https://genius.com/Bloc-party-this-modern-love-lyrics',
+    )
+
+    await user.click(screen.getByRole('tab', { name: 'Lyrics' }))
+    await user.click(screen.getByRole('tab', { name: 'Comments' }))
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps lyrics intact when Genius comments fail and allows switching back', async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      songUrl: 'https://genius.com/Bloc-party-this-modern-love-lyrics',
+      comments: [],
+      commentsUnavailable: true,
+    }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    renderApp()
+
+    await user.click(await screen.findByRole('button', { name: /This Modern Love/ }))
+    await user.click(screen.getByRole('tab', { name: 'Comments' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Comments are unavailable right now.')
+    await user.click(screen.getByRole('tab', { name: 'Lyrics' }))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'This Modern Love' })).toBeVisible())
+    expect(screen.getByText('[Licensed lyrics are not loaded in this preview.]')).toBeVisible()
+  })
+
+  it('keeps focus mode lyrics-only', async () => {
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(await screen.findByRole('button', { name: /This Modern Love/ }))
+    await user.click(screen.getByRole('button', { name: 'Focus reading' }))
+
+    expect(screen.queryByRole('tab', { name: 'Comments' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'This Modern Love' })).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: 'Exit focus' }))
+    expect(screen.getByRole('tab', { name: 'Comments' })).toBeInTheDocument()
   })
 })

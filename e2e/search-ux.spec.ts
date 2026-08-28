@@ -50,6 +50,20 @@ async function fulfillJson(route: Route, body: unknown, status = 200): Promise<v
 }
 
 async function installApiFixtures(page: Page): Promise<void> {
+  await page.route('**/api/genius-comments?**', async (route) => {
+    await fulfillJson(route, {
+      songUrl: 'https://genius.com/Bloc-party-this-modern-love-lyrics',
+      comments: [
+        {
+          id: 'qa-comment-1',
+          body: 'The chorus feels like a page turning.',
+          author: 'QA listener',
+          score: 7,
+        },
+      ],
+    })
+  })
+
   await page.route('https://lrclib.net/api/**', async (route) => {
     const url = new URL(route.request().url())
 
@@ -260,9 +274,25 @@ test.describe('search UX', () => {
 
     expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
 
+    const lyricScrollPosition = await page.evaluate(() => window.scrollY)
+    const commentsRequest = page.waitForRequest((request) =>
+      request.url().includes('/api/genius-comments?'),
+    )
+    await page.getByRole('tab', { name: 'Comments' }).click()
+    expect(new URL((await commentsRequest).url()).searchParams.get('title')).toBe('This Modern Love')
+    await expect(page.getByText('The chorus feels like a page turning.')).toBeVisible()
+    await expect(page.getByRole('link', { name: /Comments from Genius/ })).toHaveAttribute(
+      'href',
+      'https://genius.com/Bloc-party-this-modern-love-lyrics',
+    )
+
+    await page.getByRole('tab', { name: 'Lyrics' }).click()
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(lyricScrollPosition)
+
     const focusToggle = page.locator('.focus-mode-toggle')
     await focusToggle.click()
     await expect(focusToggle).toHaveAttribute('aria-pressed', 'true')
     await expect(page.locator('.reader-view')).toHaveAttribute('data-focus', 'true')
+    await expect(page.getByRole('tab', { name: 'Comments' })).toHaveCount(0)
   })
 })

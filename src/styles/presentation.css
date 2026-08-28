@@ -45,7 +45,7 @@
 .lyric-reader__line-ink-blend { display: none; }
 @supports (mix-blend-mode: difference) {
   .lyric-reader__line-ink-blend { position: relative; z-index: 0; display: block; color: #fff; mix-blend-mode: difference; user-select: none; }
-  .lyric-reader__line-ink-base { position: relative; z-index: 1; color: rgb(255 255 255 / 62%); -webkit-text-stroke: 0.013em rgb(0 0 0 / 88%); paint-order: stroke fill; }
+  .lyric-reader__line-ink-base { position: relative; z-index: 1; color: rgb(255 255 255 / 62%); }
 }
 .lyric-reader__line:nth-child(3n + 2) .lyric-reader__line-text { transform: translate3d(var(--lyrics-ripple-x-reverse, 0), var(--lyrics-ripple-y-reverse, 0), 0); }
 .lyric-reader__line:nth-child(3n) .lyric-reader__line-text { transform: translate3d(var(--lyrics-ripple-y, 0), var(--lyrics-ripple-x-reverse, 0), 0); }

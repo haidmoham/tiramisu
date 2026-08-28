@@ -8,6 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "vitest run",
+    "test:catalog": "node scripts/check-live-catalog.mjs",
+    "test:e2e": "playwright test",
     "test:watch": "vitest",
     "preview": "vite preview"
   },
@@ -29,6 +31,7 @@
     "@types/react-dom": "^19.2.4",
     "@types/three": "^0.185.4",
     "@vitejs/plugin-react": "5.2.0",
+    "@playwright/test": "^1.55.0",
     "jsdom": "^30.0.1",
     "oxlint": "^1.79.0",
     "typescript": "~6.0.2",

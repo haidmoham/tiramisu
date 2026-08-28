@@ -124,7 +124,7 @@ test.describe('search UX', () => {
     await openSearch(page)
 
     await expect(page.getByRole('heading', { name: 'lyrics' })).toBeVisible()
-    await expect(page.getByText('3 lyric sheets')).toBeVisible()
+    await expect(page.getByText('3 lyric sheets', { exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: /This Modern Love/ })).toBeVisible()
     await expect(page.getByRole('button', { name: /Melancholy/ })).toBeVisible()
     await expect(page.getByRole('button', { name: /cbd/ })).toBeVisible()
@@ -133,7 +133,7 @@ test.describe('search UX', () => {
     await input.fill('modern')
     await page.getByRole('button', { name: 'Look up' }).click()
     await expect(page.getByRole('button', { name: /Looking/ })).toBeDisabled()
-    await expect(page.getByText('1 match')).toBeVisible()
+    await expect(page.getByText('1 match', { exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: /QA Signal/ })).toBeVisible()
 
     await page.getByRole('button', { name: /QA Signal/ }).click()
@@ -276,6 +276,10 @@ test.describe('search UX', () => {
 
     expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
 
+    await expect.poll(() => page.evaluate(() => {
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight
+      return Math.abs(maxScroll - window.scrollY)
+    })).toBeLessThanOrEqual(1)
     const lyricScrollPosition = await page.evaluate(() => window.scrollY)
     const commentsRequest = page.waitForRequest((request) =>
       request.url().includes('/api/genius-comments?'),
@@ -283,7 +287,7 @@ test.describe('search UX', () => {
     await page.getByRole('tab', { name: 'Comments' }).click()
     expect(new URL((await commentsRequest).url()).searchParams.get('title')).toBe('This Modern Love')
     await expect(page.getByText('The chorus feels like a page turning.')).toBeVisible()
-    await expect(page.getByRole('link', { name: /Comments from Genius/ })).toHaveAttribute(
+    await expect(page.getByRole('link', { name: /Open this song on Genius/ })).toHaveAttribute(
       'href',
       'https://genius.com/Bloc-party-this-modern-love-lyrics',
     )

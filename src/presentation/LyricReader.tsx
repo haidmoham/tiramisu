@@ -119,10 +119,8 @@ export function LyricReader({
         </header>
       </div>
 
-      <hr className="lyric-reader__rule" />
-
       <ol className="lyric-reader__lines" aria-label={`lyrics for ${document.track.title}`}>
-        {document.lines.map((line, index) => (
+        {document.lines.map((line) => (
           <li
             ref={(element) => {
               if (element) lineRefs.current.set(line.id, element)
@@ -134,9 +132,6 @@ export function LyricReader({
             data-active={line.id === state.activeLineId}
             aria-current={line.id === state.activeLineId ? 'true' : undefined}
           >
-            <span className="lyric-reader__line-number" aria-hidden="true">
-              {String(index + 1).padStart(2, '0')}
-            </span>
             <p className="lyric-reader__line-text">
               <span className="lyric-reader__line-ink">
                 <span className="lyric-reader__line-ink-blend" aria-hidden="true">

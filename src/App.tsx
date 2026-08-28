@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useReducer, useRef, useState } from 'react'
-import type { Dispatch } from 'react'
+import type { Dispatch, KeyboardEvent } from 'react'
 import { Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import type { LyricsProvider, LyricsSearchField, TrackSummary } from './domain'
 import { initialLookupState, lookupReducer } from './app/lookupReducer'
@@ -215,7 +215,6 @@ function SearchView({
                   className="result-card"
                   onClick={() => navigate(`/lyrics/${track.id}`)}
                 >
-                  <span className="result-card__index">{String(index + 1).padStart(2, '0')}</span>
                   <span className="result-card__identity">
                     <strong>{track.title}</strong>
                     <span>{track.artist}</span>
@@ -278,6 +277,8 @@ function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
   const commentsController = useRef<AbortController | null>(null)
   const commentsRequestId = useRef(0)
   const lyricScrollPosition = useRef(0)
+  const lyricsTabRef = useRef<HTMLButtonElement>(null)
+  const commentsTabRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (!trackId) return undefined
@@ -401,6 +402,21 @@ function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
     setFocusMode(nextFocused)
   }
 
+  const handleReaderTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+    event.preventDefault()
+
+    const nextMode = event.key === 'ArrowRight' || event.key === 'End' ? 'comments' : 'lyrics'
+    if (nextMode === 'comments') {
+      showComments()
+      commentsTabRef.current?.focus()
+      return
+    }
+
+    showLyrics()
+    lyricsTabRef.current?.focus()
+  }
+
   return (
     <main className="reader-view" data-focus={focusMode} data-canvas={canvasAvailable}>
       {canvasAvailable ? <AmbientLayer onFallback={() => setCanvasAvailable(false)} /> : null}
@@ -413,21 +429,27 @@ function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
           {!focusMode ? (
             <div className="reader-mode-toggle" role="tablist" aria-label="Reader view">
               <button
+                ref={lyricsTabRef}
                 id="reader-mode-lyrics"
                 type="button"
                 role="tab"
                 aria-selected={comments.mode === 'lyrics'}
                 aria-controls="reader-lyrics-panel"
+                tabIndex={comments.mode === 'lyrics' ? 0 : -1}
+                onKeyDown={handleReaderTabKeyDown}
                 onClick={showLyrics}
               >
                 Lyrics
               </button>
               <button
+                ref={commentsTabRef}
                 id="reader-mode-comments"
                 type="button"
                 role="tab"
                 aria-selected={comments.mode === 'comments'}
                 aria-controls="reader-comments-panel"
+                tabIndex={comments.mode === 'comments' ? 0 : -1}
+                onKeyDown={handleReaderTabKeyDown}
                 onClick={showComments}
               >
                 Comments
@@ -453,7 +475,10 @@ function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
         <CommentsPanel
           status={comments.status}
           response={comments.response}
+          track={{ title: document.track.title, artist: document.track.artist }}
           hidden={comments.mode !== 'comments'}
+          onRetry={() => void fetchComments(1)}
+          onReturnToLyrics={showLyrics}
           onLoadMore={() => {
             if (comments.response?.nextPage) void fetchComments(comments.response.nextPage)
           }}

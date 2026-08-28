@@ -104,7 +104,7 @@ describe('App routing and lookup states', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(fetchMock.mock.calls[0]?.[0]).toContain('/api/genius-comments?')
     expect(fetchMock.mock.calls[0]?.[0]).toContain('title=This+Modern+Love')
-    expect(screen.getByRole('link', { name: /Comments from Genius/ })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /Open this song on Genius/ })).toHaveAttribute(
       'href',
       'https://genius.com/Bloc-party-this-modern-love-lyrics',
     )
@@ -127,8 +127,8 @@ describe('App routing and lookup states', () => {
     await user.click(await screen.findByRole('button', { name: /This Modern Love/ }))
     await user.click(screen.getByRole('tab', { name: 'Comments' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Comments are unavailable right now.')
-    await user.click(screen.getByRole('tab', { name: 'Lyrics' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Genius notes aren’t available here right now.')
+    await user.click(screen.getByRole('button', { name: 'Back to lyrics' }))
     await waitFor(() => expect(screen.getByRole('heading', { name: 'This Modern Love' })).toBeVisible())
     expect(screen.getByText('[Licensed lyrics are not loaded in this preview.]')).toBeVisible()
   })
@@ -145,5 +145,33 @@ describe('App routing and lookup states', () => {
 
     await user.click(screen.getByRole('button', { name: 'Exit focus' }))
     expect(screen.getByRole('tab', { name: 'Comments' })).toBeInTheDocument()
+  })
+
+  it('implements keyboard navigation for the reader tabs', async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      songUrl: 'https://genius.com/Bloc-party-this-modern-love-lyrics',
+      comments: [{ id: '1', body: 'A keyboard-opened note.', author: 'Mina' }],
+    }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    renderApp()
+
+    await user.click(await screen.findByRole('button', { name: /This Modern Love/ }))
+    const lyricsTab = screen.getByRole('tab', { name: 'Lyrics' })
+    const commentsTab = screen.getByRole('tab', { name: 'Comments' })
+
+    expect(lyricsTab).toHaveAttribute('tabindex', '0')
+    expect(commentsTab).toHaveAttribute('tabindex', '-1')
+    lyricsTab.focus()
+    await user.keyboard('{ArrowRight}')
+
+    expect(commentsTab).toHaveFocus()
+    expect(commentsTab).toHaveAttribute('aria-selected', 'true')
+    expect(commentsTab).toHaveAttribute('tabindex', '0')
+    expect(await screen.findByText('A keyboard-opened note.')).toBeVisible()
+
+    await user.keyboard('{Home}')
+    expect(lyricsTab).toHaveFocus()
+    expect(lyricsTab).toHaveAttribute('aria-selected', 'true')
   })
 })

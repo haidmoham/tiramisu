@@ -30,10 +30,19 @@ export async function GET(request: Request): Promise<Response> {
     const searchResponse = await fetch(searchUrl, {
       headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
     })
-    if (!searchResponse.ok) return json({ error: 'Genius search is unavailable.' }, 502)
+    if (!searchResponse.ok) {
+      console.warn('Genius search request failed.', { status: searchResponse.status })
+      return json(
+        { error: 'Genius search is unavailable.', upstreamStatus: searchResponse.status },
+        502,
+      )
+    }
 
     song = selectMatchingSong(await searchResponse.json(), query.title, query.artist)
-  } catch {
+  } catch (error) {
+    console.warn('Genius search request failed before a response.', {
+      name: error instanceof Error ? error.name : 'UnknownError',
+    })
     return json({ error: 'Genius search is unavailable.' }, 502)
   }
 

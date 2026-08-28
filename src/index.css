@@ -31,6 +31,7 @@
 }
 
 * { box-sizing: border-box; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 body * { text-transform: lowercase; }
 html { min-width: 320px; min-height: 100%; background: var(--paper); scroll-behavior: smooth; }
 body { min-width: 320px; min-height: 100%; margin: 0; background: var(--paper); overscroll-behavior-y: none; text-transform: lowercase; }

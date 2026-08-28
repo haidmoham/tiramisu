@@ -26,9 +26,9 @@ type Blob = {
 }
 
 const MAX_PIXEL_RATIO = 1.5
-const TOUCH_DECAY_MS = 700
-const BLOB_SPRING = 19
-const BLOB_DAMPING = 6
+const TOUCH_DECAY_MS = 1200
+const BLOB_SPRING = 9
+const BLOB_DAMPING = 2.8
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(Math.max(value, minimum), maximum)
@@ -113,6 +113,7 @@ export function AmbientCanvas({ className, input, onFallback }: AmbientCanvasPro
       uResolution: { value: new THREE.Vector2(1, 1) },
       uInteraction: { value: 0 },
       uColorTime: { value: 0 },
+      uRippleTime: { value: 0 },
       uBlobA: { value: blobs[0].uniform },
       uBlobB: { value: blobs[1].uniform },
       uBlobC: { value: blobs[2].uniform },
@@ -136,6 +137,7 @@ export function AmbientCanvas({ className, input, onFallback }: AmbientCanvasPro
           uniform vec2 uResolution;
           uniform float uInteraction;
           uniform float uColorTime;
+          uniform float uRippleTime;
           uniform vec4 uBlobA;
           uniform vec4 uBlobB;
           uniform vec4 uBlobC;
@@ -149,6 +151,10 @@ export function AmbientCanvas({ className, input, onFallback }: AmbientCanvasPro
             vec2 pull = pointer - center;
             float angle = atan(pull.y, pull.x);
             vec2 delta = point - center;
+            float radial = length(delta);
+            float ripple = 1.0
+              + sin(radial * 30.0 - uRippleTime * 2.2 + blob.x * 9.0) * (0.045 + uInteraction * 0.035)
+              + sin(radial * 17.0 + uRippleTime * 1.35 + blob.y * 11.0) * 0.028;
             float cosine = cos(angle);
             float sine = sin(angle);
             vec2 local = vec2(
@@ -157,6 +163,7 @@ export function AmbientCanvas({ className, input, onFallback }: AmbientCanvasPro
             );
             local.x /= blob.w;
             local.y *= sqrt(blob.w);
+            local /= ripple;
             return (blob.z * blob.z) / (dot(local, local) + 0.0015);
           }
 
@@ -224,6 +231,15 @@ export function AmbientCanvas({ className, input, onFallback }: AmbientCanvasPro
       uniforms.uPointer.value.copy(currentPointer)
       uniforms.uInteraction.value = currentInteraction
       uniforms.uColorTime.value = colorTime
+      uniforms.uRippleTime.value = reducedMotion.matches ? 0 : colorTime
+      const rippleStrength = reducedMotion.matches ? 0 : 0.35 + currentInteraction * 0.65
+      const rippleX = ((currentPointer.x - 0.5) * 3.2 + Math.sin(colorTime * 1.7) * 0.7) * rippleStrength
+      const rippleY = ((0.5 - currentPointer.y) * 2.4 + Math.cos(colorTime * 1.35) * 0.55) * rippleStrength
+      const rootStyle = document.documentElement.style
+      rootStyle.setProperty('--lyrics-ripple-x', `${rippleX.toFixed(2)}px`)
+      rootStyle.setProperty('--lyrics-ripple-y', `${rippleY.toFixed(2)}px`)
+      rootStyle.setProperty('--lyrics-ripple-x-reverse', `${(-rippleX * 0.72).toFixed(2)}px`)
+      rootStyle.setProperty('--lyrics-ripple-y-reverse', `${(-rippleY * 0.72).toFixed(2)}px`)
     }
 
     const resize = () => {
@@ -253,8 +269,8 @@ export function AmbientCanvas({ className, input, onFallback }: AmbientCanvasPro
       const touchStrength = activeTouch ? 1 : mouseFine ? 0.62 : 0
 
       blobs.forEach((blob) => {
-        const idleX = Math.sin(idleTime * 0.58 + blob.phase) * blob.drift.x
-        const idleY = Math.cos(idleTime * 0.46 + blob.phase * 1.3) * blob.drift.y
+        const idleX = (Math.sin(idleTime * 0.58 + blob.phase) + Math.sin(idleTime * 0.23 + blob.phase * 1.7) * 0.42) * blob.drift.x
+        const idleY = (Math.cos(idleTime * 0.46 + blob.phase * 1.3) + Math.sin(idleTime * 0.19 + blob.phase * 0.8) * 0.4) * blob.drift.y
         blob.target.set(blob.base.x + idleX, blob.base.y + idleY)
 
         towardPointer.copy(targetPointer).sub(blob.target)
@@ -447,6 +463,11 @@ export function AmbientCanvas({ className, input, onFallback }: AmbientCanvasPro
       field.geometry.dispose()
       ;(field.material as THREE.Material).dispose()
       renderer.dispose()
+      const rootStyle = document.documentElement.style
+      rootStyle.removeProperty('--lyrics-ripple-x')
+      rootStyle.removeProperty('--lyrics-ripple-y')
+      rootStyle.removeProperty('--lyrics-ripple-x-reverse')
+      rootStyle.removeProperty('--lyrics-ripple-y-reverse')
     }
   }, [])
 

@@ -34,4 +34,34 @@ describe('GET /api/genius-comments', () => {
       upstreamStatus: 403,
     })
   })
+
+  it('keeps the song fallback and reports when the comments feed is blocked', async () => {
+    vi.stubEnv('GENIUS_ACCESS_TOKEN', 'configured-for-test')
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        response: {
+          hits: [{
+            result: {
+              id: 123,
+              title: 'cbd',
+              primary_artist: { name: 'brakence' },
+              url: 'https://genius.com/Brakence-cbd-lyrics',
+            },
+          }],
+        },
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 403 })))
+
+    const response = await GET(
+      new Request('https://tiramisu.test/api/genius-comments?title=cbd&artist=brakence&page=1'),
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      songUrl: 'https://genius.com/Brakence-cbd-lyrics',
+      comments: [],
+      commentsUnavailable: true,
+      commentsUpstreamStatus: 403,
+    })
+  })
 })

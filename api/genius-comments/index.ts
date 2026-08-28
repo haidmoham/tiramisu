@@ -54,7 +54,9 @@ export async function GET(request: Request): Promise<Response> {
     commentsUrl.searchParams.set('page', String(query.page))
     commentsUrl.searchParams.set('text_format', 'plain')
     const commentsResponse = await fetch(commentsUrl, { headers: { Accept: 'application/json' } })
-    if (!commentsResponse.ok) return json(unavailableCommentsPayload(song.songUrl), 200)
+    if (!commentsResponse.ok) {
+      return json(unavailableCommentsPayload(song.songUrl, commentsResponse.status), 200)
+    }
 
     return json(normalizeCommentsResponse(song.songUrl, await commentsResponse.json()), 200)
   } catch {

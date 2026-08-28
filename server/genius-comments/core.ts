@@ -16,6 +16,7 @@ export interface GeniusCommentsPayload {
   comments: GeniusComment[]
   nextPage?: number
   commentsUnavailable?: boolean
+  commentsUpstreamStatus?: number
 }
 
 type RecordValue = Record<string, unknown>
@@ -95,8 +96,16 @@ export function normalizeCommentsResponse(songUrl: string, payload: unknown): Ge
   }
 }
 
-export function unavailableCommentsPayload(songUrl: string): GeniusCommentsPayload {
-  return { songUrl, comments: [], commentsUnavailable: true }
+export function unavailableCommentsPayload(
+  songUrl: string,
+  commentsUpstreamStatus?: number,
+): GeniusCommentsPayload {
+  return {
+    songUrl,
+    comments: [],
+    commentsUnavailable: true,
+    ...(commentsUpstreamStatus ? { commentsUpstreamStatus } : {}),
+  }
 }
 
 function nextPageFrom(response: unknown): { nextPage?: number } {

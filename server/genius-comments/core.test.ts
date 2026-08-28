@@ -35,6 +35,48 @@ describe('normalizeCommentsResponse', () => {
       nextPage: 2,
     })
   })
+
+  it('turns official Genius song referents into genuine public notes', () => {
+    expect(
+      normalizeCommentsResponse('https://genius.com/Queen-bohemian-rhapsody-lyrics', {
+        response: {
+          referents: [
+            {
+              annotations: [
+                {
+                  id: 901,
+                  body: { plain: 'A real annotation from the matched Genius song.' },
+                  votes_total: 14,
+                  authors: [
+                    {
+                      attribution: 1,
+                      user: {
+                        name: 'Genius contributor',
+                        avatar: { tiny: { url: 'https://images.genius.com/contributor.png' } },
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+          next_page: 2,
+        },
+      }),
+    ).toEqual({
+      songUrl: 'https://genius.com/Queen-bohemian-rhapsody-lyrics',
+      comments: [
+        {
+          id: '901',
+          body: 'A real annotation from the matched Genius song.',
+          author: 'Genius contributor',
+          avatarUrl: 'https://images.genius.com/contributor.png',
+          score: 14,
+        },
+      ],
+      nextPage: 2,
+    })
+  })
 })
 
 describe('selectMatchingSong', () => {

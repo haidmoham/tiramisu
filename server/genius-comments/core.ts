@@ -61,25 +61,29 @@ export function selectMatchingSong(
   return undefined
 }
 
-/** Converts Genius's private response shape into the small browser contract. */
+/** Converts Genius notes into the small browser contract. */
 export function normalizeCommentsResponse(songUrl: string, payload: unknown): GeniusCommentsPayload {
   const response = asRecord(payload)?.response
-  const commentsCandidate = asRecord(response)?.comments
-  const comments: unknown[] = Array.isArray(commentsCandidate) ? commentsCandidate : []
+  const responseRecord = asRecord(response)
+  const comments = commentCandidates(responseRecord)
 
   return {
     songUrl,
     comments: comments.flatMap((comment) => {
       const entry = asRecord(comment)
       const body = plainText(entry?.body)
-      const author = asRecord(entry?.author)
-      const authorName = plainText(author?.name)
+      const author = commentAuthor(entry)
+      const authorName = plainText(author?.name) ?? plainText(author?.login)
       const id = entry?.id
 
       if (!body || !authorName || (typeof id !== 'string' && typeof id !== 'number')) return []
 
       const avatar = asRecord(author?.avatar)
-      const avatarUrl = pickUrl(avatar?.tiny_url) ?? pickUrl(avatar?.url) ?? pickUrl(author?.avatar_url)
+      const avatarTiny = asRecord(avatar?.tiny)
+      const avatarUrl = pickUrl(avatarTiny?.url)
+        ?? pickUrl(avatar?.tiny_url)
+        ?? pickUrl(avatar?.url)
+        ?? pickUrl(author?.avatar_url)
       const score = pickNumber(entry?.score) ?? pickNumber(entry?.votes_total)
 
       return [
@@ -94,6 +98,31 @@ export function normalizeCommentsResponse(songUrl: string, payload: unknown): Ge
     }),
     ...nextPageFrom(response),
   }
+}
+
+function commentCandidates(response: RecordValue | undefined): unknown[] {
+  const directComments = Array.isArray(response?.comments) ? response.comments : []
+  const referents = Array.isArray(response?.referents) ? response.referents : []
+  const annotations = referents.flatMap((referent) => {
+    const candidates = asRecord(referent)?.annotations
+    return Array.isArray(candidates) ? candidates : []
+  })
+
+  return [...directComments, ...annotations]
+}
+
+function commentAuthor(entry: RecordValue | undefined): RecordValue | undefined {
+  const directAuthor = asRecord(entry?.author)
+  if (directAuthor) return directAuthor
+
+  const authors = entry?.authors
+  if (!Array.isArray(authors)) return undefined
+  for (const author of authors) {
+    const user = asRecord(asRecord(author)?.user)
+    if (user) return user
+  }
+
+  return undefined
 }
 
 export function unavailableCommentsPayload(

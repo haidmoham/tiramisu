@@ -5,7 +5,6 @@ import {
 } from '../../server/genius-comments/core.js'
 
 const GENIUS_API = 'https://api.genius.com'
-const GENIUS_WEB_API = 'https://genius.com/api/'
 const MAX_QUERY_LENGTH = 160
 const MAX_PAGE = 50
 const COMMENTS_PER_PAGE = 20
@@ -49,11 +48,14 @@ export async function GET(request: Request): Promise<Response> {
   if (!song) return json({ error: 'No matching Genius song was found.' }, 404)
 
   try {
-    const commentsUrl = new URL(`songs/${song.id}/comments`, GENIUS_WEB_API)
+    const commentsUrl = new URL('/referents', GENIUS_API)
+    commentsUrl.searchParams.set('song_id', String(song.id))
     commentsUrl.searchParams.set('per_page', String(COMMENTS_PER_PAGE))
     commentsUrl.searchParams.set('page', String(query.page))
     commentsUrl.searchParams.set('text_format', 'plain')
-    const commentsResponse = await fetch(commentsUrl, { headers: { Accept: 'application/json' } })
+    const commentsResponse = await fetch(commentsUrl, {
+      headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+    })
     if (!commentsResponse.ok) {
       return json(unavailableCommentsPayload(song.songUrl, commentsResponse.status), 200)
     }

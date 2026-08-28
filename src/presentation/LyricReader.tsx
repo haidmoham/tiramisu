@@ -57,12 +57,14 @@ export function LyricReader({ document, state, className, onScrollProgress }: Ly
 
   return (
     <article ref={readerRef} className={readerClassName} aria-labelledby="lyric-reader-title">
-      <header className="lyric-reader__header">
-        <h1 id="lyric-reader-title" className="lyric-reader__artist">
-          {document.track.artist}
-        </h1>
-        <h2 className="lyric-reader__title">{document.track.title}</h2>
-      </header>
+      <div className="lyric-reader__identity">
+        <header className="lyric-reader__header">
+          <h1 id="lyric-reader-title" className="lyric-reader__artist">
+            {document.track.artist}
+          </h1>
+          <h2 className="lyric-reader__title">{document.track.title}</h2>
+        </header>
+      </div>
 
       <hr className="lyric-reader__rule" />
 
@@ -82,6 +84,7 @@ export function LyricReader({ document, state, className, onScrollProgress }: Ly
           </li>
         ))}
       </ol>
+
     </article>
   )
 }

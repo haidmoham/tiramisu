@@ -1,9 +1,14 @@
-.reader-view,
 .reader-state {
   position: relative;
   isolation: isolate;
   min-height: 100svh;
   overflow: clip;
+}
+
+.reader-view {
+  position: relative;
+  isolation: isolate;
+  min-height: 100svh;
 }
 
 .search-view {

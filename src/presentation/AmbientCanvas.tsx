@@ -1,10 +1,5 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
-import {
-  clearPublishedBackdropContrast,
-  estimateBackdropDarkness,
-  publishBackdropContrast,
-} from './backdropContrast'
 
 export interface AmbientCanvasProps {
   className?: string
@@ -25,7 +20,6 @@ type Blob = {
   target: THREE.Vector2
   velocity: THREE.Vector2
   radius: number
-  darkness: number
   phase: number
   drift: THREE.Vector2
   uniform: THREE.Vector4
@@ -42,11 +36,11 @@ function clamp(value: number, minimum: number, maximum: number) {
 
 function createBlobs(): Blob[] {
   const definitions = [
-    { x: 0.18, y: 0.25, radius: 0.25, darkness: 0.17, phase: 0.4, driftX: 0.065, driftY: 0.05 },
-    { x: 0.55, y: 0.21, radius: 0.27, darkness: 0.86, phase: 2.1, driftX: 0.075, driftY: 0.055 },
-    { x: 0.79, y: 0.48, radius: 0.235, darkness: 0.26, phase: 4.2, driftX: 0.06, driftY: 0.075 },
-    { x: 0.43, y: 0.63, radius: 0.29, darkness: 0.07, phase: 5.3, driftX: 0.085, driftY: 0.06 },
-    { x: 0.12, y: 0.76, radius: 0.22, darkness: 0.58, phase: 3.3, driftX: 0.055, driftY: 0.07 },
+    { x: 0.18, y: 0.25, radius: 0.25, phase: 0.4, driftX: 0.065, driftY: 0.05 },
+    { x: 0.55, y: 0.21, radius: 0.27, phase: 2.1, driftX: 0.075, driftY: 0.055 },
+    { x: 0.79, y: 0.48, radius: 0.235, phase: 4.2, driftX: 0.06, driftY: 0.075 },
+    { x: 0.43, y: 0.63, radius: 0.29, phase: 5.3, driftX: 0.085, driftY: 0.06 },
+    { x: 0.12, y: 0.76, radius: 0.22, phase: 3.3, driftX: 0.055, driftY: 0.07 },
   ]
 
   return definitions.map((definition) => {
@@ -57,7 +51,6 @@ function createBlobs(): Blob[] {
       target: base.clone(),
       velocity: new THREE.Vector2(),
       radius: definition.radius,
-      darkness: definition.darkness,
       phase: definition.phase,
       drift: new THREE.Vector2(definition.driftX, definition.driftY),
       uniform: new THREE.Vector4(definition.x, definition.y, definition.radius, 1),
@@ -225,7 +218,6 @@ export function AmbientCanvas({ className, input, onFallback }: AmbientCanvasPro
     let targetInteraction = 0
     let currentInteraction = 0
     let colorTime = 0
-    let currentInkMode = publishBackdropContrast(document.documentElement, 0, 'dark')
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
     const targetPointer = new THREE.Vector2(0.5, 0.5)
     const currentPointer = new THREE.Vector2(0.5, 0.5)
@@ -248,19 +240,6 @@ export function AmbientCanvas({ className, input, onFallback }: AmbientCanvasPro
       rootStyle.setProperty('--lyrics-ripple-y', `${rippleY.toFixed(2)}px`)
       rootStyle.setProperty('--lyrics-ripple-x-reverse', `${(-rippleX * 0.72).toFixed(2)}px`)
       rootStyle.setProperty('--lyrics-ripple-y-reverse', `${(-rippleY * 0.72).toFixed(2)}px`)
-      currentInkMode = publishBackdropContrast(
-        document.documentElement,
-        estimateBackdropDarkness(
-          blobs.map((blob) => ({
-            x: blob.position.x,
-            y: blob.position.y,
-            radius: blob.radius,
-            stretch: blob.uniform.w,
-            darkness: blob.darkness,
-          })),
-        ),
-        currentInkMode,
-      )
     }
 
     const resize = () => {
@@ -451,7 +430,6 @@ export function AmbientCanvas({ className, input, onFallback }: AmbientCanvasPro
     const onContextLost = (event: Event) => {
       event.preventDefault()
       stop()
-      clearPublishedBackdropContrast(document.documentElement)
       reportFallback('context-lost')
     }
 
@@ -482,7 +460,6 @@ export function AmbientCanvas({ className, input, onFallback }: AmbientCanvasPro
       document.removeEventListener('visibilitychange', onVisibilityChange)
       canvas.removeEventListener('webglcontextlost', onContextLost)
       reducedMotion.removeEventListener('change', onReducedMotionChange)
-      clearPublishedBackdropContrast(document.documentElement)
       field.geometry.dispose()
       ;(field.material as THREE.Material).dispose()
       renderer.dispose()

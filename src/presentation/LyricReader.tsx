@@ -103,7 +103,14 @@ export function LyricReader({ document, state, className, onScrollProgress }: Ly
             <span className="lyric-reader__line-number" aria-hidden="true">
               {String(index + 1).padStart(2, '0')}
             </span>
-            <p className="lyric-reader__line-text">{line.text}</p>
+            <p className="lyric-reader__line-text">
+              <span className="lyric-reader__line-ink">
+                <span className="lyric-reader__line-ink-blend" aria-hidden="true">
+                  {line.text}
+                </span>
+                <span className="lyric-reader__line-ink-base">{line.text}</span>
+              </span>
+            </p>
           </li>
         ))}
       </ol>

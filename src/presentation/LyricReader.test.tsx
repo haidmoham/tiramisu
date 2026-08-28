@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { LyricDocument } from '../domain'
 import { LyricReader } from './LyricReader'
 
@@ -18,11 +18,6 @@ const document: LyricDocument = {
 }
 
 describe('LyricReader', () => {
-  afterEach(() => {
-    globalThis.document.documentElement.style.removeProperty('--ambient-reader-ink')
-    globalThis.document.documentElement.style.removeProperty('--ambient-reader-muted')
-  })
-
   it('renders a semantic lyric document without provider response fields', () => {
     render(<LyricReader document={document} state={{ focusMode: false }} />)
 
@@ -71,16 +66,15 @@ describe('LyricReader', () => {
     expect(line.style.getPropertyValue('--lyric-glass-opacity')).toBe('1.000')
   })
 
-  it('consumes the backdrop ink tokens for both lyric and pinned identity copy', () => {
-    globalThis.document.documentElement.style.setProperty('--ambient-reader-ink', '#fff7df')
-    globalThis.document.documentElement.style.setProperty('--ambient-reader-muted', '#d8d5ff')
-
+  it('keeps the lyric text in a separate ink layer for backdrop blending', () => {
     const { container } = render(<LyricReader document={document} state={{ focusMode: false }} />)
 
-    expect(container.querySelector('.lyric-reader__artist')).toBeInTheDocument()
-    expect(container.querySelector('.lyric-reader__line-text')).toBeInTheDocument()
-    expect(container.querySelector('.lyric-reader__title')).toBeInTheDocument()
-    expect(globalThis.document.documentElement.style.getPropertyValue('--ambient-reader-ink')).toBe('#fff7df')
-    expect(globalThis.document.documentElement.style.getPropertyValue('--ambient-reader-muted')).toBe('#d8d5ff')
+    expect(container.querySelector('.lyric-reader__line-ink-base')).toHaveTextContent(
+      'A line remains readable without the scene.',
+    )
+    expect(container.querySelector('.lyric-reader__line-ink-blend')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    )
   })
 })

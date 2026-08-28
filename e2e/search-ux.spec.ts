@@ -146,6 +146,11 @@ test.describe('search UX', () => {
     const reader = page.locator('.lyric-reader')
     const readerBox = await reader.boundingBox()
     expect(readerBox?.width ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(390)
+    const readerMetrics = await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }))
+    expect(readerMetrics.scrollWidth).toBeLessThanOrEqual(readerMetrics.clientWidth)
     expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeGreaterThan(844)
 
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))

@@ -9,6 +9,7 @@
   position: relative;
   isolation: isolate;
   min-height: 100svh;
+  overflow-x: clip;
 }
 
 .search-view {

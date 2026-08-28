@@ -1,16 +1,17 @@
 import { lazy, Suspense, useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import type { Dispatch } from 'react'
-import { Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom'
+import { Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import type { LyricsProvider, TrackSummary } from './domain'
 import { initialLookupState, lookupReducer } from './app/lookupReducer'
-import { FixtureLyricsProvider } from './lookup'
+import { TiramisuLyricsProvider } from './lookup'
 import type { AmbientCanvasProps } from './presentation/AmbientCanvas'
 import { FocusModeToggle } from './presentation/FocusModeToggle'
 import { LyricReader } from './presentation/LyricReader'
+import { ResultSymbolToy } from './presentation/ResultSymbolToy'
 import './styles/presentation.css'
 import './App.css'
 
-const provider = new FixtureLyricsProvider()
+const defaultProvider = new TiramisuLyricsProvider()
 const AmbientCanvas = lazy(async () => {
   const module = await import('./presentation/AmbientCanvas')
   return { default: module.AmbientCanvas }
@@ -24,7 +25,11 @@ function AmbientLayer(props: AmbientCanvasProps) {
   )
 }
 
-function App() {
+export interface AppProps {
+  provider?: LyricsProvider
+}
+
+function App({ provider = defaultProvider }: AppProps) {
   const [state, dispatch] = useReducer(lookupReducer, initialLookupState)
   const searchRequestId = useRef(0)
   const searchController = useRef<AbortController | null>(null)
@@ -43,7 +48,7 @@ function App() {
       if (isAbortError(error)) return
       dispatch({ type: 'searchFailed', requestId, error: messageFrom(error) })
     }
-  }, [])
+  }, [provider])
 
   useEffect(() => {
     void search('')
@@ -100,10 +105,10 @@ function SearchView({
       <div className="search-view__frame">
         <header className="search-view__masthead">
           <h1 className="wordmark">
-            <a href="/" aria-label="tiramisu home">
+            <Link to="/" aria-label="tiramisu home">
               <span className="wordmark__dot" aria-hidden="true" />
               tiramisu
-            </a>
+            </Link>
           </h1>
         </header>
 
@@ -138,11 +143,19 @@ function SearchView({
           </form>
         </section>
 
-        <section className="result-shelf" aria-labelledby="result-heading" aria-live="polite">
+        <section
+          className="result-shelf"
+          aria-labelledby="result-heading"
+          aria-busy={isLoading}
+        >
           <div className="result-shelf__heading">
             <h2 id="result-heading">{query ? 'results' : 'lyrics'}</h2>
             <span>{status === 'ready' ? `${results.length}` : ''}</span>
           </div>
+
+          <p className="sr-only" role="status" aria-live="polite">
+            {isLoading ? 'looking for lyrics' : status === 'ready' ? `${results.length} results` : ''}
+          </p>
 
           {status === 'error' ? (
             <div className="lookup-message" role="alert">
@@ -171,7 +184,9 @@ function SearchView({
                     <strong>{track.title}</strong>
                     <span>{track.artist}</span>
                   </span>
-                  <span className="result-card__collection">{track.collection}</span>
+                  <span className="result-card__toy">
+                    <ResultSymbolToy seed={`${track.id}-${index}`} />
+                  </span>
                   <span className="result-card__arrow" aria-hidden="true">↗</span>
                 </button>
               </li>
@@ -230,7 +245,7 @@ function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
     [document],
   )
 
-  if (state.lyricsStatus === 'error') {
+  if (state.selectedTrackId === trackId && state.lyricsStatus === 'error') {
     return (
       <main className="reader-state">
         <AmbientLayer />

@@ -16,7 +16,6 @@ const TRACKS: readonly LyricDocument[] = [
       collection: 'Preview shelf',
       source: 'fixture',
     },
-    source: 'fixture',
     lines: [
       { id: '1', text: '[Licensed lyrics are not loaded in this preview.]' },
       { id: '2', text: '[Connect a licensed source to read this track.]' },
@@ -30,7 +29,6 @@ const TRACKS: readonly LyricDocument[] = [
       collection: 'Preview shelf',
       source: 'fixture',
     },
-    source: 'fixture',
     lines: [
       { id: '1', text: '[Licensed lyrics are not loaded in this preview.]' },
       { id: '2', text: '[Connect a licensed source to read this track.]' },
@@ -44,7 +42,6 @@ const TRACKS: readonly LyricDocument[] = [
       collection: 'Preview shelf',
       source: 'fixture',
     },
-    source: 'fixture',
     lines: [
       { id: '1', text: '[Licensed lyrics are not loaded in this preview.]' },
       { id: '2', text: '[Connect a licensed source to read this track.]' },
@@ -103,7 +100,7 @@ export class FixtureLyricsProvider implements LyricsProvider {
 }
 
 function normalize(value: string): string {
-  return value.trim().toLocaleLowerCase()
+  return value.trim().toLowerCase()
 }
 
 function abortError(): Error {

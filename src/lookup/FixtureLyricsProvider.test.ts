@@ -55,7 +55,7 @@ describe('FixtureLyricsProvider', () => {
       artist: 'Driveways',
       title: 'Melancholy',
     })
-    expect(document.source).toBe('fixture')
+    expect(document.track.source).toBe('fixture')
     expect(document.lines[0]).toMatchObject({
       text: '[Licensed lyrics are not loaded in this preview.]',
     })

@@ -4,7 +4,6 @@ import type { LyricDocument } from '../domain'
 import { LyricReader } from './LyricReader'
 
 const document: LyricDocument = {
-  source: 'fixture',
   track: {
     id: 'paper-test',
     title: 'Paper Test',
@@ -23,7 +22,8 @@ describe('LyricReader', () => {
     render(<LyricReader document={document} state={{ focusMode: false }} />)
 
     expect(screen.getByRole('article')).toHaveAttribute('aria-labelledby', 'lyric-reader-title')
-    expect(screen.getByRole('heading', { name: 'Paper Test' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'The Fixtures' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Paper Test' })).toBeInTheDocument()
     expect(screen.getByRole('list', { name: 'lyrics for Paper Test' })).toHaveTextContent(
       'Presentation state stays provider-neutral.',
     )

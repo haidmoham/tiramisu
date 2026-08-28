@@ -13,7 +13,6 @@ const track: TrackSummary = {
 
 const document: LyricDocument = {
   track,
-  source: 'fixture',
   lines: [{ id: '1', text: 'The window holds the afternoon like tea.' }],
 }
 

@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import type { LyricDocument } from './domain'
 import App from './App'
+import { FixtureLyricsProvider } from './lookup'
 
 vi.mock('./presentation/AmbientCanvas', () => ({
   AmbientCanvas: () => <canvas data-testid="ambient-canvas" />,
@@ -37,7 +38,7 @@ vi.mock('./presentation/LyricReader', () => ({
 function renderApp(path = '/') {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <App />
+      <App provider={new FixtureLyricsProvider({ latencyMs: 0 })} />
     </MemoryRouter>,
   )
 }

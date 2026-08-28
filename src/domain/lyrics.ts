@@ -8,7 +8,7 @@ export interface TrackSummary {
 }
 
 /** The origin of lyric text. More provider kinds can be added without changing consumers. */
-export type LyricsSource = 'fixture'
+export type LyricsSource = 'fixture' | 'lrclib' | 'lrcmux'
 
 /** One displayed line in a lyric document. */
 export interface LyricLine {
@@ -19,7 +19,6 @@ export interface LyricLine {
 /** A complete lyric sheet for one track. */
 export interface LyricDocument {
   track: TrackSummary
-  source: LyricsSource
   lines: readonly LyricLine[]
 }
 

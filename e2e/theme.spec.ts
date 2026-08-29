@@ -41,6 +41,37 @@ async function expectTheme(
 }
 
 test.describe('theme modes', () => {
+  test('restores the original light palette while preserving the dark palette', async ({ page }) => {
+    await openThemeSurface(page, 'light')
+
+    const palette = async () => page.evaluate(() => {
+      const styles = getComputedStyle(document.documentElement)
+      return ['--paper', '--ink', '--red', '--yellow', '--blue', '--violet', '--teal']
+        .map((token) => styles.getPropertyValue(token).trim())
+    })
+
+    await expect.poll(palette).toEqual([
+      '#fff7df',
+      '#151044',
+      '#ff4b35',
+      '#ffe94c',
+      '#2754e9',
+      '#7a38d9',
+      '#00b9a1',
+    ])
+
+    await themeOption(page, 'Dark').click()
+    await expect.poll(palette).toEqual([
+      '#160f18',
+      '#f2e5d4',
+      '#c06a59',
+      '#d1a15d',
+      '#899aab',
+      '#b486a1',
+      '#88a28e',
+    ])
+  })
+
   test('defaults to System and follows the operating-system color scheme', async ({ page }) => {
     await openThemeSurface(page, 'dark')
     await expectTheme(page, 'dark', 'system')

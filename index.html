@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#f4eedf" />
+    <meta name="theme-color" content="#fff7df" />
     <script>
       (() => {
         const root = document.documentElement
@@ -32,7 +32,7 @@
         root.dataset.themePreference = preference
         root.style.colorScheme = resolved
         const themeColor = document.querySelector('meta[name="theme-color"]')
-        if (themeColor) themeColor.setAttribute('content', resolved === 'dark' ? '#160f18' : '#f4eedf')
+        if (themeColor) themeColor.setAttribute('content', resolved === 'dark' ? '#160f18' : '#fff7df')
       })()
     </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />

@@ -24,6 +24,13 @@ function environment(overrides: Partial<Window> = {}) {
 }
 
 describe('theme state', () => {
+  it('uses the original light chrome color without changing dark chrome', () => {
+    expect(THEME_COLORS).toEqual({
+      light: '#fff7df',
+      dark: '#160f18',
+    })
+  })
+
   it('defaults invalid or unavailable stored values to system', () => {
     const invalid = environment()
     invalid.localStorage.getItem.mockReturnValue('sepia')

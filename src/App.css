@@ -121,7 +121,7 @@
 .search-view__footer { align-items: end; padding-block-start: 1rem; border-top: 2px solid var(--ink); }
 .search-view__footer span:last-child { display: none; }
 
-.reader-view { --reader-ink: #151044; --reader-muted: #403a67; --reader-hairline: rgb(21 16 68 / 31%); --reader-paper: rgb(255 247 223 / 88%); background: var(--paper); }
+.reader-view { --reader-ink: #173f42; --reader-muted: #46686a; --reader-hairline: rgb(23 63 66 / 31%); --reader-paper: rgb(255 247 223 / 88%); background: var(--paper); }
 .reader-tools { position: fixed; inset-block-start: max(0.75rem, env(safe-area-inset-top)); inset-inline: max(0.75rem, env(safe-area-inset-left)) max(0.75rem, env(safe-area-inset-right)); z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; pointer-events: none; }
 .reader-tools > * { pointer-events: auto; }
 .reader-tools__end { display: flex; align-items: center; justify-content: flex-end; gap: 0.55rem; pointer-events: auto; }
@@ -176,7 +176,7 @@
 .reader-comments__collection-heading h2 { margin: 0; font: inherit; }
 .reader-comments__collection-heading span { color: var(--reader-muted); }
 .reader-comments__list { display: grid; gap: clamp(1rem, 2.5vw, 1.4rem); margin: 1.25rem 0 0; padding: 0 0.4rem 0.4rem 0; list-style: none; }
-.reader-comments__item { position: relative; padding: clamp(1.35rem, 4vw, 2rem) clamp(1.1rem, 4vw, 1.7rem) clamp(1.15rem, 3vw, 1.5rem); border: 2px solid var(--reader-ink); background: rgb(255 255 255 / 80%); box-shadow: 0.3rem 0.3rem 0 rgb(21 16 68 / 84%); }
+.reader-comments__item { position: relative; padding: clamp(1.35rem, 4vw, 2rem) clamp(1.1rem, 4vw, 1.7rem) clamp(1.15rem, 3vw, 1.5rem); border: 2px solid var(--reader-ink); background: rgb(255 255 255 / 80%); box-shadow: 0.3rem 0.3rem 0 rgb(23 63 66 / 84%); }
 .reader-comments__item:nth-child(3n + 2) { background: rgb(45 201 164 / 36%); transform: rotate(-0.35deg); }
 .reader-comments__item:nth-child(3n) { background: rgb(255 233 76 / 48%); transform: rotate(0.35deg); }
 .reader-comments__body { margin: 0; font-family: var(--font-display); font-size: clamp(1.55rem, 6vw, 2.45rem); font-weight: 530; letter-spacing: -0.035em; line-height: 0.95; white-space: pre-wrap; overflow-wrap: anywhere; }

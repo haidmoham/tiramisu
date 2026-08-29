@@ -187,7 +187,7 @@ export function AmbientCanvas({ className, input, onFallback }: AmbientCanvasPro
             float yellowShift = 0.5 + 0.5 * sin(uColorTime * 0.24 + uBlobD.x * 3.0 - uBlobD.y * 6.0);
             float pinkShift = 0.5 + 0.5 * sin(uColorTime * 0.3 + uBlobE.x * 7.0 + uBlobE.y * 2.0);
             vec3 coral = mix(vec3(1.0, 0.10, 0.08), vec3(1.0, 0.37, 0.15), coralShift * 0.4);
-            vec3 indigo = mix(vec3(0.10, 0.08, 0.68), vec3(0.29, 0.28, 1.0), indigoShift * 0.4);
+            vec3 indigo = mix(vec3(0.42, 0.60, 0.62), vec3(0.76, 0.84, 0.82), indigoShift * 0.4);
             vec3 teal = mix(vec3(0.0, 0.57, 0.46), vec3(0.05, 0.87, 0.69), tealShift * 0.4);
             vec3 yellow = mix(vec3(1.0, 0.60, 0.02), vec3(1.0, 0.90, 0.18), yellowShift * 0.4);
             vec3 pink = mix(vec3(0.84, 0.06, 0.32), vec3(1.0, 0.28, 0.59), pinkShift * 0.4);

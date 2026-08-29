@@ -41,7 +41,7 @@ async function expectTheme(
 }
 
 test.describe('theme modes', () => {
-  test('restores the original light palette while preserving the dark palette', async ({ page }) => {
+  test('uses the restored light palette with silver teal ink while preserving dark', async ({ page }) => {
     await openThemeSurface(page, 'light')
 
     const palette = async () => page.evaluate(() => {
@@ -52,10 +52,10 @@ test.describe('theme modes', () => {
 
     await expect.poll(palette).toEqual([
       '#fff7df',
-      '#151044',
+      '#173f42',
       '#ff4b35',
       '#ffe94c',
-      '#2754e9',
+      '#7aa7aa',
       '#7a38d9',
       '#00b9a1',
     ])

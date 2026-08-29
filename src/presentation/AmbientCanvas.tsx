@@ -102,7 +102,8 @@ export function AmbientCanvas({ className, input, onFallback }: AmbientCanvasPro
       return undefined
     }
 
-    renderer.setClearColor(0xfff7df, 1)
+    const isDarkTheme = () => document.documentElement.dataset.theme === 'dark'
+    renderer.setClearColor(isDarkTheme() ? 0x160f18 : 0xf4eedf, 1)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO))
 
     const scene = new THREE.Scene()
@@ -114,6 +115,7 @@ export function AmbientCanvas({ className, input, onFallback }: AmbientCanvasPro
       uInteraction: { value: 0 },
       uColorTime: { value: 0 },
       uRippleTime: { value: 0 },
+      uTheme: { value: isDarkTheme() ? 1 : 0 },
       uBlobA: { value: blobs[0].uniform },
       uBlobB: { value: blobs[1].uniform },
       uBlobC: { value: blobs[2].uniform },
@@ -138,6 +140,7 @@ export function AmbientCanvas({ className, input, onFallback }: AmbientCanvasPro
           uniform float uInteraction;
           uniform float uColorTime;
           uniform float uRippleTime;
+          uniform float uTheme;
           uniform vec4 uBlobA;
           uniform vec4 uBlobB;
           uniform vec4 uBlobC;
@@ -183,11 +186,16 @@ export function AmbientCanvas({ className, input, onFallback }: AmbientCanvasPro
             float tealShift = 0.5 + 0.5 * sin(uColorTime * 0.29 + uBlobC.x * 5.0 + uBlobC.y * 4.0);
             float yellowShift = 0.5 + 0.5 * sin(uColorTime * 0.24 + uBlobD.x * 3.0 - uBlobD.y * 6.0);
             float pinkShift = 0.5 + 0.5 * sin(uColorTime * 0.3 + uBlobE.x * 7.0 + uBlobE.y * 2.0);
-            vec3 coral = mix(vec3(1.0, 0.10, 0.08), vec3(1.0, 0.37, 0.15), coralShift * 0.4);
-            vec3 indigo = mix(vec3(0.10, 0.08, 0.68), vec3(0.29, 0.28, 1.0), indigoShift * 0.4);
-            vec3 teal = mix(vec3(0.0, 0.57, 0.46), vec3(0.05, 0.87, 0.69), tealShift * 0.4);
-            vec3 yellow = mix(vec3(1.0, 0.60, 0.02), vec3(1.0, 0.90, 0.18), yellowShift * 0.4);
-            vec3 pink = mix(vec3(0.84, 0.06, 0.32), vec3(1.0, 0.28, 0.59), pinkShift * 0.4);
+            vec3 coral = mix(vec3(0.63, 0.19, 0.16), vec3(0.78, 0.38, 0.25), coralShift * 0.4);
+            vec3 indigo = mix(vec3(0.18, 0.16, 0.28), vec3(0.34, 0.29, 0.42), indigoShift * 0.4);
+            vec3 teal = mix(vec3(0.20, 0.36, 0.31), vec3(0.38, 0.51, 0.42), tealShift * 0.4);
+            vec3 yellow = mix(vec3(0.62, 0.41, 0.16), vec3(0.82, 0.63, 0.31), yellowShift * 0.4);
+            vec3 pink = mix(vec3(0.46, 0.18, 0.29), vec3(0.64, 0.31, 0.40), pinkShift * 0.4);
+            coral = mix(coral, vec3(0.42, 0.12, 0.13), uTheme);
+            indigo = mix(indigo, vec3(0.22, 0.13, 0.25), uTheme);
+            teal = mix(teal, vec3(0.24, 0.32, 0.29), uTheme);
+            yellow = mix(yellow, vec3(0.57, 0.37, 0.18), uTheme);
+            pink = mix(pink, vec3(0.42, 0.16, 0.27), uTheme);
             vec3 blobColor = (coral * a + indigo * b + teal * c + yellow * d + pink * e) / weight;
 
             float merged = smoothstep(0.92, 1.12, total);
@@ -195,10 +203,10 @@ export function AmbientCanvas({ className, input, onFallback }: AmbientCanvasPro
             float core = smoothstep(1.16, 2.15, total);
             float contact = 1.0 - smoothstep(0.0, 0.2, length(vUv - uPointer));
             float grain = fract(sin(dot(vUv * 1193.0, vec2(12.9898, 78.233))) * 43758.5453);
-            vec3 paper = vec3(1.0, 0.969, 0.875) + (grain - 0.5) * 0.012;
+            vec3 paper = mix(vec3(0.957, 0.933, 0.875), vec3(0.086, 0.058, 0.094), uTheme) + (grain - 0.5) * mix(0.012, 0.007, uTheme);
             vec3 color = mix(paper, blobColor, merged * 0.98);
-            color = mix(color, vec3(0.10, 0.07, 0.28), contour * 0.46);
-            color = mix(color, min(blobColor * 1.18 + vec3(0.07), 1.0), core * 0.22);
+            color = mix(color, mix(vec3(0.16, 0.11, 0.14), vec3(0.06, 0.025, 0.07), uTheme), contour * 0.46);
+            color = mix(color, min(blobColor * mix(1.18, 0.92, uTheme) + vec3(mix(0.07, 0.025, uTheme)), 1.0), core * 0.22);
             color += blobColor * contact * uInteraction * 0.13;
             gl_FragColor = vec4(color, 1.0);
           }
@@ -227,8 +235,15 @@ export function AmbientCanvas({ className, input, onFallback }: AmbientCanvasPro
 
     const render = () => renderer.render(scene, camera)
 
+    const syncTheme = () => {
+      const dark = isDarkTheme()
+      uniforms.uTheme.value = dark ? 1 : 0
+      renderer.setClearColor(dark ? 0x160f18 : 0xf4eedf, 1)
+    }
+
     const syncUniforms = () => {
       uniforms.uPointer.value.copy(currentPointer)
+      syncTheme()
       uniforms.uInteraction.value = currentInteraction
       uniforms.uColorTime.value = colorTime
       uniforms.uRippleTime.value = reducedMotion.matches ? 0 : colorTime
@@ -434,7 +449,9 @@ export function AmbientCanvas({ className, input, onFallback }: AmbientCanvasPro
     }
 
     const resizeObserver = new ResizeObserver(resize)
+    const themeObserver = new MutationObserver(() => requestRender())
     resizeObserver.observe(canvas)
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
     window.addEventListener('pointerdown', onPointerDown, { passive: true })
     window.addEventListener('pointermove', onPointerMove, { passive: true })
     window.addEventListener('pointerup', onPointerUp, { passive: true })
@@ -452,6 +469,7 @@ export function AmbientCanvas({ className, input, onFallback }: AmbientCanvasPro
       stop()
       requestRenderRef.current = null
       resizeObserver.disconnect()
+      themeObserver.disconnect()
       window.removeEventListener('pointerdown', onPointerDown)
       window.removeEventListener('pointermove', onPointerMove)
       window.removeEventListener('pointerup', onPointerUp)

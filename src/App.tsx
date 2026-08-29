@@ -10,6 +10,8 @@ import type { AmbientCanvasProps } from './presentation/AmbientCanvas'
 import { FocusModeToggle } from './presentation/FocusModeToggle'
 import { LyricReader } from './presentation/LyricReader'
 import { ResultSymbolToy } from './presentation/ResultSymbolToy'
+import { ThemeToggle } from './presentation/ThemeToggle'
+import { ThemeProvider } from './theme'
 import './styles/presentation.css'
 import './App.css'
 
@@ -32,6 +34,14 @@ export interface AppProps {
 }
 
 function App({ provider = defaultProvider }: AppProps) {
+  return (
+    <ThemeProvider>
+      <AppRoutes provider={provider} />
+    </ThemeProvider>
+  )
+}
+
+function AppRoutes({ provider }: { provider: LyricsProvider }) {
   const [state, dispatch] = useReducer(lookupReducer, initialLookupState)
   const [searchField, setSearchField] = useState<LyricsSearchField>('smart')
   const searchRequestId = useRef(0)
@@ -124,6 +134,7 @@ function SearchView({
               tiramisu
             </Link>
           </h1>
+          <ThemeToggle />
         </header>
 
         <section className="search-hero" aria-label="Lyric search">
@@ -426,6 +437,7 @@ function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
           <span>Search</span>
         </button>
         <div className="reader-tools__end">
+          <ThemeToggle />
           {!focusMode ? (
             <div className="reader-mode-toggle" role="tablist" aria-label="Reader view">
               <button

@@ -16,7 +16,7 @@ export interface LyricReaderProps {
 }
 
 function clamp(value: number, minimum: number, maximum: number) {
-  return Math.min(Math.max(value, minimum), maximum)
+  return Math.min(maximum, Math.max(minimum, value))
 }
 
 export function LyricReader({
@@ -81,8 +81,6 @@ export function LyricReader({
         const bounds = line.getBoundingClientRect()
         const center = (bounds.top + bounds.bottom) / 2
         const progress = clamp((center - glass.bottom) / feather, 0, 1)
-        // Once a line reaches the lower edge of the pinned identity it is
-        // fully beneath the glass. It deliberately stays hidden as it moves on.
         const opacity = progress * progress * (3 - 2 * progress)
 
         line.style.setProperty('--lyric-glass-opacity', opacity.toFixed(3))

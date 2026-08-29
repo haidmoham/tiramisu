@@ -3,7 +3,38 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#eee8dc" />
+    <meta name="theme-color" content="#f4eedf" />
+    <script>
+      (() => {
+        const root = document.documentElement
+        const key = 'tiramisu-theme-preference'
+        let preference = 'system'
+        try {
+          const stored = window.localStorage.getItem(key)
+          if (stored === 'light' || stored === 'dark' || stored === 'system') preference = stored
+        } catch {
+          // Storage can be unavailable in privacy mode; system is a safe default.
+        }
+
+        let systemIsDark = false
+        if (preference === 'system') {
+          try {
+            systemIsDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+          } catch {
+            systemIsDark = false
+          }
+        }
+
+        const resolved = preference === 'dark' || (preference === 'system' && systemIsDark)
+          ? 'dark'
+          : 'light'
+        root.dataset.theme = resolved
+        root.dataset.themePreference = preference
+        root.style.colorScheme = resolved
+        const themeColor = document.querySelector('meta[name="theme-color"]')
+        if (themeColor) themeColor.setAttribute('content', resolved === 'dark' ? '#160f18' : '#f4eedf')
+      })()
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="description" content="lyrics" />
     <meta property="og:title" content="tiramisu" />

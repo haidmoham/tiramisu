@@ -32,7 +32,7 @@ describe('LyricReader', () => {
   })
 
   it('renders a semantic lyric document without provider response fields', () => {
-    render(<LyricReader document={document} state={{ focusMode: false }} />)
+    const { container } = render(<LyricReader document={document} state={{ focusMode: false }} />)
 
     expect(screen.getByRole('article')).toHaveAttribute('aria-labelledby', 'lyric-reader-title')
     expect(screen.getByRole('heading', { level: 1, name: 'The Fixtures' })).toBeInTheDocument()
@@ -40,6 +40,7 @@ describe('LyricReader', () => {
     expect(screen.getByRole('list', { name: 'lyrics for Paper Test' })).toHaveTextContent(
       'Presentation state stays provider-neutral.',
     )
+    expect(container.querySelector('.lyric-reader__line-number')).toBeNull()
   })
 
   it('applies focus and active-line state without changing the document', () => {
@@ -58,7 +59,7 @@ describe('LyricReader', () => {
     expect(container.querySelector('#lyric-line-two')).toHaveAttribute('aria-current', 'true')
   })
 
-  it('fades a line one-way beneath the fixed identity glass', () => {
+  it('keeps the hollow identity visible while concealing lyrics beneath it', () => {
     const { container } = render(<LyricReader document={document} state={{ focusMode: false }} />)
     const identity = container.querySelector('.lyric-reader__identity') as HTMLDivElement
     const line = container.querySelector('.lyric-reader__line') as HTMLLIElement
@@ -70,12 +71,14 @@ describe('LyricReader', () => {
 
     fireEvent.scroll(window)
 
+    expect(identity).not.toHaveClass('lyric-reader__identity--cleared')
     expect(line.style.getPropertyValue('--lyric-glass-opacity')).toBe('0.000')
 
     line.getBoundingClientRect = () =>
       ({ top: 430, bottom: 470 }) as DOMRect
     fireEvent.scroll(window)
 
+    expect(identity).not.toHaveClass('lyric-reader__identity--cleared')
     expect(line.style.getPropertyValue('--lyric-glass-opacity')).toBe('1.000')
   })
 

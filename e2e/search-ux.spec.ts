@@ -202,6 +202,38 @@ test.describe('search UX', () => {
     await expect(page.locator('.result-list .result-card').first()).toHaveAccessibleName(/Far SZA/)
   })
 
+  for (const viewport of [
+    { label: 'desktop', width: 1280, height: 720 },
+    { label: 'mobile', width: 390, height: 844 },
+  ]) {
+    test(`aligns identity and lyric copy on ${viewport.label}`, async ({ page }) => {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height })
+      await openSearch(page)
+      await page.getByRole('button', { name: /This Modern Love/ }).click()
+      await expect(page.getByRole('heading', { name: 'This Modern Love' })).toBeVisible()
+
+      const alignment = await page.evaluate(() => {
+        const artist = document.querySelector('.lyric-reader__artist')
+        const title = document.querySelector('.lyric-reader__title')
+        const lyric = document.querySelector('.lyric-reader__line-text')
+        if (!artist || !title || !lyric) return null
+
+        return {
+          artistLeft: artist.getBoundingClientRect().left,
+          titleLeft: title.getBoundingClientRect().left,
+          lyricLeft: lyric.getBoundingClientRect().left,
+          clientWidth: document.documentElement.clientWidth,
+          scrollWidth: document.documentElement.scrollWidth,
+        }
+      })
+
+      expect(alignment).not.toBeNull()
+      expect(Math.abs((alignment?.artistLeft ?? 0) - (alignment?.lyricLeft ?? 0))).toBeLessThanOrEqual(1)
+      expect(Math.abs((alignment?.titleLeft ?? 0) - (alignment?.lyricLeft ?? 0))).toBeLessThanOrEqual(1)
+      expect(alignment?.scrollWidth).toBeLessThanOrEqual(alignment?.clientWidth ?? 0)
+    })
+  }
+
   test('keeps the 390px mobile surface focused, scrollable, and within the viewport', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await openSearch(page)

@@ -2,9 +2,9 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
 
 type Theme = 'light' | 'dark'
 type ThemePreference = Theme | 'system'
-type ThemeOption = 'Light' | 'Dark' | 'System'
+type ThemeOption = 'Light' | 'Somber' | 'System'
 
-const THEME_OPTIONS: readonly ThemeOption[] = ['Light', 'Dark', 'System']
+const THEME_OPTIONS: readonly ThemeOption[] = ['Light', 'Somber', 'System']
 const THEME_PREFERENCE_STORAGE_KEY = 'tiramisu-theme-preference'
 
 function themeRoot(page: Page): Locator {
@@ -50,7 +50,7 @@ test.describe('theme modes', () => {
     await expect(themeRoot(page)).toHaveAttribute('data-theme-preference', 'system')
   })
 
-  test('exposes Light, Dark, and System as accessible options', async ({ page }) => {
+  test('exposes Light, Somber, and System as accessible options', async ({ page }) => {
     await openThemeSurface(page, 'light')
 
     for (const option of THEME_OPTIONS) {
@@ -60,7 +60,7 @@ test.describe('theme modes', () => {
     await themeOption(page, 'Light').click()
     await expectTheme(page, 'light', 'light')
 
-    await themeOption(page, 'Dark').click()
+    await themeOption(page, 'Somber').click()
     await expectTheme(page, 'dark', 'dark')
 
     await themeOption(page, 'System').click()
@@ -72,7 +72,7 @@ test.describe('theme modes', () => {
     await page.goto('/')
     await expect(page.getByRole('searchbox', { name: 'Search the lyric sheets' })).toBeVisible()
 
-    await themeOption(page, 'Dark').click()
+    await themeOption(page, 'Somber').click()
     await expectTheme(page, 'dark', 'dark')
 
     await page.reload()

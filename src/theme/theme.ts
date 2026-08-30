@@ -9,7 +9,7 @@ export type ResolvedTheme = (typeof RESOLVED_THEMES)[number]
 /** Colors used by the browser UI (and the address-bar theme-color metadata). */
 export const THEME_COLORS: Record<ResolvedTheme, string> = {
   light: '#f4eedf',
-  dark: '#160f18',
+  dark: '#140817',
 }
 
 export interface ThemeEnvironment {

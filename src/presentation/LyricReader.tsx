@@ -1,18 +1,15 @@
 import { useEffect, useRef } from 'react'
-import type { LyricDocument, LyricLine } from '../domain/lyrics'
-import { resolveActiveLyricIndex } from './lyricProgress'
+import type { LyricDocument } from '../domain/lyrics'
 
 /** The small state surface the app can own without coupling the reader to lookup. */
 export interface PresentationState {
   focusMode: boolean
-  activeLineId?: LyricLine['id']
 }
 
 export interface LyricReaderProps {
   document: LyricDocument
   state: PresentationState
   className?: string
-  onActiveLineChange?: (lineId: LyricLine['id']) => void
 }
 
 function clamp(value: number, minimum: number, maximum: number) {
@@ -23,43 +20,28 @@ export function LyricReader({
   document,
   state,
   className,
-  onActiveLineChange,
 }: LyricReaderProps) {
   const readerRef = useRef<HTMLElement>(null)
   const identityRef = useRef<HTMLDivElement>(null)
   const tailRef = useRef<HTMLDivElement>(null)
-  const lineRefs = useRef(new Map<LyricLine['id'], HTMLLIElement>())
-  const activeLineCallbackRef = useRef(onActiveLineChange)
-  const lastReportedLineRef = useRef<LyricLine['id'] | undefined>(undefined)
-
-  useEffect(() => {
-    activeLineCallbackRef.current = onActiveLineChange
-  }, [onActiveLineChange])
+  const lineRefs = useRef(new Map<string, HTMLLIElement>())
 
   useEffect(() => {
     const reader = readerRef.current
     if (!reader) return undefined
-    lastReportedLineRef.current = undefined
 
     const reportProgress = () => {
       const identity = identityRef.current
       if (!identity) return
 
-      const glass = identity.getBoundingClientRect()
+      const identityBounds = identity.getBoundingClientRect()
       const anchor = state.focusMode
         ? Math.max(72, Math.min(window.innerHeight * 0.18, 160))
-        : glass.bottom + 8
+        : identityBounds.bottom + 8
       const lines = document.lines
         .map((line) => lineRefs.current.get(line.id))
         .filter((line): line is HTMLLIElement => Boolean(line))
       const lineBounds = lines.map((line) => line.getBoundingClientRect())
-      const activeIndex = resolveActiveLyricIndex(lineBounds, anchor)
-      const activeLineId = document.lines[activeIndex]?.id
-
-      if (activeLineId && activeLineId !== lastReportedLineRef.current) {
-        lastReportedLineRef.current = activeLineId
-        activeLineCallbackRef.current?.(activeLineId)
-      }
 
       const tail = tailRef.current
       const lastBounds = lineBounds.at(-1)
@@ -75,15 +57,15 @@ export function LyricReader({
 
       if (state.focusMode) return
 
-      const feather = Math.min(56, Math.max(32, glass.height * 0.18))
+      const feather = Math.min(56, Math.max(32, identityBounds.height * 0.18))
 
       lines.forEach((line) => {
         const bounds = line.getBoundingClientRect()
         const center = (bounds.top + bounds.bottom) / 2
-        const progress = clamp((center - glass.bottom) / feather, 0, 1)
+        const progress = clamp((center - identityBounds.bottom) / feather, 0, 1)
         const opacity = progress * progress * (3 - 2 * progress)
 
-        line.style.setProperty('--lyric-glass-opacity', opacity.toFixed(3))
+        line.style.setProperty('--lyric-reveal-opacity', opacity.toFixed(3))
       })
     }
 
@@ -127,8 +109,6 @@ export function LyricReader({
             key={line.id}
             id={`lyric-line-${line.id}`}
             className="lyric-reader__line"
-            data-active={line.id === state.activeLineId}
-            aria-current={line.id === state.activeLineId ? 'true' : undefined}
           >
             <p className="lyric-reader__line-text">
               <span className="lyric-reader__line-ink">

@@ -4,7 +4,7 @@ import type { ThemePreference } from '../theme'
 
 const LABELS: Record<ThemePreference, string> = {
   light: 'Light',
-  dark: 'Dark',
+  dark: 'Somber',
   system: 'System',
 }
 

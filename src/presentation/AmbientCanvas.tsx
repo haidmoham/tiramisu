@@ -103,7 +103,7 @@ export function AmbientCanvas({ className, input, onFallback }: AmbientCanvasPro
     }
 
     const isDarkTheme = () => document.documentElement.dataset.theme === 'dark'
-    renderer.setClearColor(isDarkTheme() ? 0x160f18 : 0xf4eedf, 1)
+    renderer.setClearColor(isDarkTheme() ? 0x140817 : 0xf4eedf, 1)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO))
 
     const scene = new THREE.Scene()
@@ -191,23 +191,20 @@ export function AmbientCanvas({ className, input, onFallback }: AmbientCanvasPro
             vec3 teal = mix(vec3(0.20, 0.36, 0.31), vec3(0.38, 0.51, 0.42), tealShift * 0.4);
             vec3 yellow = mix(vec3(0.62, 0.41, 0.16), vec3(0.82, 0.63, 0.31), yellowShift * 0.4);
             vec3 pink = mix(vec3(0.46, 0.18, 0.29), vec3(0.64, 0.31, 0.40), pinkShift * 0.4);
-            coral = mix(coral, vec3(0.42, 0.12, 0.13), uTheme);
-            indigo = mix(indigo, vec3(0.22, 0.13, 0.25), uTheme);
-            teal = mix(teal, vec3(0.24, 0.32, 0.29), uTheme);
-            yellow = mix(yellow, vec3(0.57, 0.37, 0.18), uTheme);
-            pink = mix(pink, vec3(0.42, 0.16, 0.27), uTheme);
+            coral = mix(coral, vec3(0.92, 0.15, 0.31), uTheme);
+            indigo = mix(indigo, vec3(0.43, 0.10, 0.65), uTheme);
+            teal = mix(teal, vec3(0.18, 0.25, 0.24), uTheme);
+            yellow = mix(yellow, vec3(0.45, 0.28, 0.18), uTheme);
+            pink = mix(pink, vec3(0.64, 0.08, 0.38), uTheme);
             vec3 blobColor = (coral * a + indigo * b + teal * c + yellow * d + pink * e) / weight;
 
-            float merged = smoothstep(0.92, 1.12, total);
-            float contour = smoothstep(0.78, 0.94, total) - smoothstep(0.98, 1.15, total);
-            float core = smoothstep(1.16, 2.15, total);
+            float merged = smoothstep(0.96, 1.03, total);
+            float contour = smoothstep(0.90, 0.96, total) - smoothstep(1.03, 1.09, total);
             float contact = 1.0 - smoothstep(0.0, 0.2, length(vUv - uPointer));
-            float grain = fract(sin(dot(vUv * 1193.0, vec2(12.9898, 78.233))) * 43758.5453);
-            vec3 paper = mix(vec3(0.957, 0.933, 0.875), vec3(0.086, 0.058, 0.094), uTheme) + (grain - 0.5) * mix(0.012, 0.007, uTheme);
-            vec3 color = mix(paper, blobColor, merged * 0.98);
-            color = mix(color, mix(vec3(0.16, 0.11, 0.14), vec3(0.06, 0.025, 0.07), uTheme), contour * 0.46);
-            color = mix(color, min(blobColor * mix(1.18, 0.92, uTheme) + vec3(mix(0.07, 0.025, uTheme)), 1.0), core * 0.22);
-            color += blobColor * contact * uInteraction * 0.13;
+            vec3 paper = mix(vec3(0.957, 0.933, 0.875), vec3(0.078, 0.031, 0.090), uTheme);
+            vec3 color = mix(paper, blobColor, merged);
+            color = mix(color, mix(vec3(0.16, 0.11, 0.14), vec3(0.18, 0.04, 0.22), uTheme), contour * 0.38);
+            color += blobColor * contact * uInteraction * 0.08;
             gl_FragColor = vec4(color, 1.0);
           }
         `,
@@ -238,7 +235,7 @@ export function AmbientCanvas({ className, input, onFallback }: AmbientCanvasPro
     const syncTheme = () => {
       const dark = isDarkTheme()
       uniforms.uTheme.value = dark ? 1 : 0
-      renderer.setClearColor(dark ? 0x160f18 : 0xf4eedf, 1)
+      renderer.setClearColor(dark ? 0x140817 : 0xf4eedf, 1)
     }
 
     const syncUniforms = () => {

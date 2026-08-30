@@ -282,7 +282,6 @@ function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
   const navigate = useNavigate()
   const lyricsRequestId = useRef(0)
   const [focusMode, setFocusMode] = useState(false)
-  const [activeLineId, setActiveLineId] = useState<string | undefined>()
   const [canvasAvailable, setCanvasAvailable] = useState(true)
   const [trackComments, setTrackComments] = useState<TrackCommentsState>(initialTrackCommentsState)
   const commentsController = useRef<AbortController | null>(null)
@@ -343,9 +342,6 @@ function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
     )
   }
 
-  const presentedActiveLineId = document.lines.some((line) => line.id === activeLineId)
-    ? activeLineId
-    : document.lines[0]?.id
   const comments = trackComments.trackId === trackId ? trackComments : initialTrackCommentsState
 
   const fetchComments = async (page: number) => {
@@ -479,8 +475,7 @@ function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
       >
         <LyricReader
           document={document}
-          state={{ focusMode, activeLineId: presentedActiveLineId }}
-          onActiveLineChange={setActiveLineId}
+          state={{ focusMode }}
         />
       </section>
       {!focusMode ? (

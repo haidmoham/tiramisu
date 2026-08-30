@@ -14,12 +14,12 @@ describe('ThemeToggle', () => {
     )
 
     expect(screen.getByRole('radio', { name: 'Light' })).not.toBeChecked()
-    expect(screen.getByRole('radio', { name: 'Dark' })).not.toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Somber' })).not.toBeChecked()
     expect(screen.getByRole('radio', { name: 'System' })).toBeChecked()
 
-    await user.click(screen.getByRole('radio', { name: 'Dark' }))
+    await user.click(screen.getByRole('radio', { name: 'Somber' }))
 
-    expect(screen.getByRole('radio', { name: 'Dark' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Somber' })).toBeChecked()
     expect(document.documentElement.dataset.theme).toBe('dark')
     expect(document.documentElement.dataset.themePreference).toBe('dark')
   })

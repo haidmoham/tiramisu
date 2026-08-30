@@ -2,7 +2,6 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { LyricDocument } from '../domain'
 import { LyricReader } from './LyricReader'
-import { resolveActiveLyricIndex } from './lyricProgress'
 
 const document: LyricDocument = {
   track: {
@@ -19,18 +18,6 @@ const document: LyricDocument = {
 }
 
 describe('LyricReader', () => {
-  it('selects the first lyric whose top edge has cleared the pinned glass', () => {
-    const lineBounds = [
-      { top: 184, bottom: 292 },
-      { top: 328, bottom: 432 },
-      { top: 478, bottom: 570 },
-    ]
-
-    expect(resolveActiveLyricIndex(lineBounds, 120)).toBe(0)
-    expect(resolveActiveLyricIndex(lineBounds, 360)).toBe(2)
-    expect(resolveActiveLyricIndex(lineBounds, 620)).toBe(2)
-  })
-
   it('renders a semantic lyric document without provider response fields', () => {
     const { container } = render(<LyricReader document={document} state={{ focusMode: false }} />)
 
@@ -43,23 +30,19 @@ describe('LyricReader', () => {
     expect(container.querySelector('.lyric-reader__line-number')).toBeNull()
   })
 
-  it('applies focus and active-line state without changing the document', () => {
+  it('does not expose a current lyric indicator', () => {
     const { container, rerender } = render(
       <LyricReader document={document} state={{ focusMode: false }} />,
     )
 
-    rerender(
-      <LyricReader
-        document={document}
-        state={{ focusMode: true, activeLineId: 'two' }}
-      />,
-    )
+    rerender(<LyricReader document={document} state={{ focusMode: true }} />)
 
     expect(container.querySelector('.lyric-reader')).toHaveClass('lyric-reader--focus')
-    expect(container.querySelector('#lyric-line-two')).toHaveAttribute('aria-current', 'true')
+    expect(container.querySelectorAll('.lyric-reader__line[aria-current]')).toHaveLength(0)
+    expect(container.querySelectorAll('.lyric-reader__line[data-active]')).toHaveLength(0)
   })
 
-  it('keeps the hollow identity visible while concealing lyrics beneath it', () => {
+  it('keeps the pinned identity readable while lyrics pass beneath it', () => {
     const { container } = render(<LyricReader document={document} state={{ focusMode: false }} />)
     const identity = container.querySelector('.lyric-reader__identity') as HTMLDivElement
     const line = container.querySelector('.lyric-reader__line') as HTMLLIElement
@@ -72,14 +55,14 @@ describe('LyricReader', () => {
     fireEvent.scroll(window)
 
     expect(identity).not.toHaveClass('lyric-reader__identity--cleared')
-    expect(line.style.getPropertyValue('--lyric-glass-opacity')).toBe('0.000')
+    expect(line.style.getPropertyValue('--lyric-reveal-opacity')).toBe('0.000')
 
     line.getBoundingClientRect = () =>
       ({ top: 430, bottom: 470 }) as DOMRect
     fireEvent.scroll(window)
 
     expect(identity).not.toHaveClass('lyric-reader__identity--cleared')
-    expect(line.style.getPropertyValue('--lyric-glass-opacity')).toBe('1.000')
+    expect(line.style.getPropertyValue('--lyric-reveal-opacity')).toBe('1.000')
   })
 
   it('keeps the lyric text in a separate ink layer for backdrop blending', () => {

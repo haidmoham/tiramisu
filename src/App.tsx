@@ -36,6 +36,7 @@ export interface AppProps {
 function App({ provider = defaultProvider }: AppProps) {
   return (
     <ThemeProvider>
+      <nav className="cluster-nav" aria-label="cluster"><a className="cluster-return" href="https://shin86.dev/"><span aria-hidden="true">←</span> shin86.dev</a></nav>
       <AppRoutes provider={provider} />
     </ThemeProvider>
   )

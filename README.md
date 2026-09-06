@@ -29,6 +29,8 @@ npm run build
 
 ## Structure
 
+Keep the shared `← shin86.dev` link outside the route switch. Direct lyric links, loading states, and errors must retain the same route to the cluster. Use the existing geometric palette for clear hover, keyboard focus, pressed, and selected control states.
+
 - `src/domain/` defines normalized lyric and provider interfaces.
 - `src/lookup/` owns fixture, LRCLIB, LrcMux, and aggregate provider adapters.
 - `src/app/` owns deterministic lookup state.

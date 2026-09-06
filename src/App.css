@@ -381,5 +381,22 @@ html[data-theme='dark'] .reader-comments__item { background: var(--surface); }
     box-shadow: none;
     transform: none;
   }
-  .result-card:hover { background: var(--surface-muted); }
+.result-card:hover { background: var(--surface-muted); }
 }
+
+/* The cluster exit stays available on search, reader, and error routes. */
+.cluster-nav{position:sticky;top:0;z-index:20;display:flex;align-items:center;height:64px;padding:0 max(1rem,env(safe-area-inset-left));background:var(--paper);border-bottom:1px solid var(--line-strong)}
+.reader-tools{inset-block-start:calc(64px + max(.75rem,env(safe-area-inset-top)))}
+.lyric-reader__identity{top:calc(64px + max(3.8rem,calc(env(safe-area-inset-top) + 3rem)))}
+@media(min-width:880px){.lyric-reader__identity{top:calc(64px + max(4.3rem,calc(env(safe-area-inset-top) + 3.5rem)))}}
+.cluster-return{display:inline-flex;align-items:center;gap:.65rem;min-height:44px;padding:.45rem .8rem;border:2px solid var(--line-strong);background:var(--surface-solid);color:var(--ink);font:700 .8rem var(--font-ui);text-decoration:none}
+.cluster-return:focus-visible{outline:3px solid var(--focus-ring);outline-offset:4px}
+:where(button,a,label){-webkit-tap-highlight-color:var(--surface-muted)}
+@media(hover:hover){
+  .cluster-return:hover,.search-form button:not(:disabled):hover,.reader-state button:hover,.reader-tools__back:hover,.reader-comments__actions button:hover,.reader-comments__actions a:hover,.reader-comments__more:hover{border-color:var(--ink);box-shadow:inset 0 -3px var(--ink);filter:brightness(1.08)}
+  .result-card:hover{box-shadow:inset 0 0 0 2px var(--ink)}
+  .search-form__mode:hover span,.theme-toggle__option:hover span,.reader-mode-toggle button:hover,.focus-mode-toggle:hover{box-shadow:inset 0 -3px var(--ink)}
+}
+.cluster-return:active,button:not(:disabled):active,.reader-tools__back:active,.reader-comments__actions a:active{box-shadow:inset 0 0 0 3px var(--ink);filter:brightness(.94)}
+.search-form__mode input:checked+span,.theme-toggle__option input:checked+span,.reader-mode-toggle button[aria-selected=true],.focus-mode-toggle[aria-pressed=true]{box-shadow:inset 0 -3px var(--ink);text-decoration:underline;text-underline-offset:4px}
+.search-form__mode input:focus-visible+span{outline:3px solid var(--focus-ring);outline-offset:3px}

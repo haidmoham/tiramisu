@@ -14,6 +14,7 @@ import { ThemeToggle } from './presentation/ThemeToggle'
 import { ThemeProvider } from './theme'
 import './styles/presentation.css'
 import './App.css'
+import './styles/blog-grammar.css'
 
 const defaultProvider = new TiramisuLyricsProvider()
 const AmbientCanvas = lazy(async () => {
@@ -280,6 +281,9 @@ const initialTrackCommentsState: TrackCommentsState = {
 
 function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
   const { trackId } = useParams()
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' })
+  }, [trackId])
   const navigate = useNavigate()
   const lyricsRequestId = useRef(0)
   const [focusMode, setFocusMode] = useState(false)

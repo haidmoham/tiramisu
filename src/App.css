@@ -400,3 +400,5 @@ html[data-theme='dark'] .reader-comments__item { background: var(--surface); }
 .cluster-return:active,button:not(:disabled):active,.reader-tools__back:active,.reader-comments__actions a:active{box-shadow:inset 0 0 0 3px var(--ink);filter:brightness(.94)}
 .search-form__mode input:checked+span,.theme-toggle__option input:checked+span,.reader-mode-toggle button[aria-selected=true],.focus-mode-toggle[aria-pressed=true]{box-shadow:inset 0 -3px var(--ink);text-decoration:underline;text-underline-offset:4px}
 .search-form__mode input:focus-visible+span{outline:3px solid var(--focus-ring);outline-offset:3px}
+
+.cluster-nav{height:80px}.reader-tools{inset-block-start:calc(80px + max(.75rem,env(safe-area-inset-top)))}

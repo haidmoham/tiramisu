@@ -32,7 +32,7 @@
         root.dataset.themePreference = preference
         root.style.colorScheme = resolved
         const themeColor = document.querySelector('meta[name="theme-color"]')
-        if (themeColor) themeColor.setAttribute('content', resolved === 'dark' ? '#160f18' : '#f4eedf')
+        if (themeColor) themeColor.setAttribute('content', resolved === 'dark' ? '#07364b' : '#eaf0ed')
       })()
     </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -48,5 +48,5 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/bootstrap.tsx"></script>
-  </body>
+  <script src="/shin86-signature.js" defer></script><script type="module" src="/signature-placement.js"></script></body>
 </html>

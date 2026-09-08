@@ -105,3 +105,25 @@ html[data-theme] .wordmark__dot{box-shadow:none}
 .lyric-reader__lines{margin-block-start:36px}
 .lyric-reader__line{scroll-margin-block:180px}
 @media(max-width:700px){.reader-tools{position:relative;inset:auto;padding:10px 12px}.lyric-reader__identity,html[data-theme='dark'] .lyric-reader__identity{inline-size:100%}}
+
+/* The original color field is the composition; reading surfaces sit within it. */
+.ambient-canvas{opacity:1}
+.search-view__masthead{min-height:340px;background:none;align-items:flex-end}
+.wordmark{color:var(--ink);background:var(--paper);padding:20px 24px 24px;letter-spacing:-.085em}
+.search-view__masthead .theme-toggle{color:var(--ink)}
+.search-hero,.result-shelf{position:relative;background:var(--paper);padding:32px}
+.search-hero{border-top:2px solid var(--red)}
+.result-shelf{padding-top:0}
+.lyric-reader{margin-top:32px;margin-bottom:64px;background:var(--paper);max-inline-size:40rem;padding:24px 32px}
+.lyric-reader__identity,html[data-theme='dark'] .lyric-reader__identity{background:transparent;inline-size:100%;min-block-size:160px}
+.lyric-reader__header{min-block-size:160px;padding:24px}
+.lyric-reader__lines{inline-size:100%}
+.reader-comments{position:relative;background:var(--paper)}
+@media(max-width:700px){
+ .search-view__masthead{min-height:310px;padding-block:42px;gap:24px}
+ .wordmark{padding:14px 16px 18px;font-size:clamp(56px,15vw,92px)}
+ .search-hero,.result-shelf{padding:24px 16px}.result-shelf{padding-top:0}
+ .lyric-reader{margin:24px 16px 48px;padding:20px;max-inline-size:calc(100% - 32px)}
+ .lyric-reader__header{padding:20px 16px}
+ .lyric-reader__line-text{font-size:clamp(23px,6.4vw,32px)}
+}

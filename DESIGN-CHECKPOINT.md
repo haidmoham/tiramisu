@@ -1,11 +1,10 @@
-# blog grammar checkpoint
+# tiramisu design checkpoint
 
-blue-hour masthead, cream and coral themes, restrained search rows, serif lyrics, and the approved 100.8px 86 signature. reader identity now stays in document flow to avoid covering lyrics.
+original moving color blob restored as the central visual motif. the blog-inspired type, blue-hour/cream palette, coral details and reading surfaces remain. the photo masthead has been replaced by the color field.
 
-verified in the in-app browser at 390px: search and reader have no horizontal overflow; light/dark themes, comments tab, focus reading, keyboard focus and signature pause work. desktop visual review completed before the final spacing fixes.
+verified: 61 unit tests, lint, production build, and 24 text/background contrast pairings pass (minimum 4.74:1). desktop search and reader visually inspected after restoring the blob. earlier 390px theme, keyboard, focus reading and signature pause checks passed; the latest mobile browser recheck timed out and remains pending.
 
-run `node scripts/check-contrast.mjs` for the 24 text token/background pairings in both themes. the photo masthead requires separate visual review. this is a targeted check, not a full accessibility audit.
-
-initial unit tests, lint and build passed. the final parallel test rerun exhausted worker startup time; retry uses `npm test -- --maxWorkers=1`. inspect final test output before publication. remaining: finish desktop reader and mobile comments content checks, rerun final build after contrast changes, then publish if requested.
+run `node scripts/check-contrast.mjs` to check the palette. this is a targeted check, not a complete accessibility audit.
 
 preview: http://localhost:5188/
+publication held while the owner reviews the redesign.

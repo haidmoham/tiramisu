@@ -24,4 +24,4 @@ for (const theme of ['light', 'dark']) {
     }
   }
 }
-console.log(`${count} text contrast checks passed (WCAG AA 4.5:1). Photo masthead needs visual review separately.`)
+console.log(`${count} text contrast checks passed (WCAG AA 4.5:1). Color-field composition needs visual review separately.`)

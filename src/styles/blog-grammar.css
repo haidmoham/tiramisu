@@ -69,7 +69,7 @@ body{background:var(--paper)}
 .lyric-reader__artist{font:500 clamp(26px,4vw,43px)/1.12 var(--font-ui);letter-spacing:-.05em;color:var(--ink)}
 .lyric-reader__title{font:500 18px/1.4 var(--font-display);color:var(--ink-soft);margin-top:12px}
 .lyric-reader__lines{margin-block-start:320px;gap:32px;padding-bottom:70px}
-.lyric-reader__line{opacity:1}
+.lyric-reader__line{opacity:var(--lyric-reveal-opacity,1)}
 .lyric-reader__line-text{font:500 clamp(25px,3.4vw,39px)/1.4 var(--font-display);letter-spacing:-.025em;color:var(--ink)}
 .reader-comments__header,.reader-comments__item,.reader-comments__item:nth-child(n),.reader-comments__state{background:var(--surface-solid);border:1px solid var(--line);box-shadow:none;transform:none}
 .reader-comments__header::before,.reader-comments__header::after{display:none}
@@ -99,7 +99,7 @@ html[data-theme] .wordmark__dot{box-shadow:none}
 .result-shelf__heading h2::before{display:none}
 .result-list li:nth-child(n) .result-card{background:transparent;box-shadow:none}
 @media(hover:hover){.result-list li:nth-child(n) .result-card:hover{background:var(--surface-muted)}}
-/* Keep identity in document flow so it cannot cover readable lyric lines. */
+/* Keep the controls above the reading column. */
 .reader-tools{position:sticky;inset:80px 0 auto;padding:10px 16px;background:var(--paper);border-bottom:1px solid var(--line)}
 .lyric-reader__identity,html[data-theme='dark'] .lyric-reader__identity{position:relative;inset:auto;transform:none;inline-size:var(--reader-column);margin-inline:auto;margin-bottom:36px}
 .lyric-reader__lines{margin-block-start:36px}
@@ -114,10 +114,11 @@ html[data-theme] .wordmark__dot{box-shadow:none}
 .search-hero,.result-shelf{position:relative;background:var(--paper);padding:32px}
 .search-hero{border-top:2px solid var(--red)}
 .result-shelf{padding-top:0}
-.lyric-reader{margin-top:32px;margin-bottom:64px;background:var(--paper);max-inline-size:40rem;padding:24px 32px}
-.lyric-reader__identity,html[data-theme='dark'] .lyric-reader__identity{background:transparent;inline-size:100%;min-block-size:160px}
+.lyric-reader{margin-top:32px;margin-bottom:64px;background:linear-gradient(135deg,#ffffff0d,transparent 45%,#ffffff05),color-mix(in srgb,var(--paper) 40%,transparent);backdrop-filter:blur(14px) saturate(1.08);-webkit-backdrop-filter:blur(14px) saturate(1.08);box-shadow:inset 0 0 0 1px #ffffff26;max-inline-size:40rem;padding:24px 32px}
+.lyric-reader__identity,html[data-theme='dark'] .lyric-reader__identity{position:sticky;top:155px;z-index:4;background:var(--paper);inline-size:100%;min-block-size:160px}
 .lyric-reader__header{min-block-size:160px;padding:24px}
 .lyric-reader__lines{inline-size:100%}
+html[data-theme='light'] .lyric-reader__line-text{color:#052430}
 .reader-comments{position:relative;background:var(--paper)}
 @media(max-width:700px){
  .search-view__masthead{min-height:310px;padding-block:42px;gap:24px}
@@ -125,5 +126,6 @@ html[data-theme] .wordmark__dot{box-shadow:none}
  .search-hero,.result-shelf{padding:24px 16px}.result-shelf{padding-top:0}
  .lyric-reader{margin:24px 16px 48px;padding:20px;max-inline-size:calc(100% - 32px)}
  .lyric-reader__header{padding:20px 16px}
- .lyric-reader__line-text{font-size:clamp(23px,6.4vw,32px)}
+ .lyric-reader__identity,html[data-theme='dark'] .lyric-reader__identity{top:80px}
+ .lyric-reader__line-text{font-size:clamp(24px,6.4vw,32px)}
 }

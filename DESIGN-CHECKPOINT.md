@@ -7,4 +7,6 @@ verified: 62 unit tests, lint, production build, and 24 text/background contrast
 run `node scripts/check-contrast.mjs` to check the palette. this is a targeted check, not a complete accessibility audit.
 
 preview: http://localhost:5188/
-publication held while the owner reviews the redesign.
+production: https://tiramisu.shin86.dev/
+
+published the approved redesign from `7f95c68` on 2026-09-07. vercel deployment `dpl_EYUF1KBGvXriF2VaRBTNpdW9466x` is ready and assigned to the custom domain. verified HTTP 200 for the homepage, matching production JS/CSS bundles, and signature asset. the fresh live browser check timed out; the desktop/mobile visual checks above were performed locally before publication.

@@ -38,6 +38,7 @@ function App({ provider = defaultProvider }: AppProps) {
   return (
     <ThemeProvider>
       <nav className="cluster-nav" aria-label="cluster"><a className="cluster-return" href="https://shin86.dev/"><span aria-hidden="true">←</span> shin86.dev</a></nav>
+      <a className="skip-link" href="#main-content">skip to content</a>
       <AppRoutes provider={provider} />
     </ThemeProvider>
   )
@@ -126,7 +127,7 @@ function SearchView({
     : ''
 
   return (
-    <main className="search-view">
+    <main id="main-content" className="search-view" tabIndex={-1}>
       <AmbientLayer />
       <div className="search-view__frame">
         <header className="search-view__masthead">
@@ -325,7 +326,7 @@ function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
 
   if (state.selectedTrackId === trackId && state.lyricsStatus === 'error') {
     return (
-      <main className="reader-state">
+      <main id="main-content" className="reader-state" tabIndex={-1}>
         <AmbientLayer />
         <p className="eyebrow">The page is missing</p>
         <h1>That lyric sheet could not be found.</h1>
@@ -339,7 +340,7 @@ function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
 
   if (!document) {
     return (
-      <main className="reader-state" aria-busy="true">
+      <main id="main-content" className="reader-state" tabIndex={-1} aria-busy="true">
         <AmbientLayer />
         <span className="reader-state__loader" aria-hidden="true" />
         <p>Opening the lyric sheet…</p>
@@ -430,7 +431,7 @@ function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
   }
 
   return (
-    <main className="reader-view" data-focus={focusMode} data-canvas={canvasAvailable}>
+    <main id="main-content" className="reader-view" tabIndex={-1} data-focus={focusMode} data-canvas={canvasAvailable}>
       {canvasAvailable ? <AmbientLayer onFallback={() => setCanvasAvailable(false)} /> : null}
       <nav className="reader-tools" aria-label="Reader controls">
         <button className="reader-tools__back" type="button" onClick={() => navigate('/')}>

@@ -46,6 +46,20 @@ function renderApp(path = '/') {
 }
 
 describe('App routing and lookup states', () => {
+  it('offers a keyboard bypass to the current route main landmark', async () => {
+    renderApp()
+
+    const skipLink = screen.getByRole('link', { name: 'skip to content' })
+    const main = await screen.findByRole('main')
+
+    expect(skipLink).toHaveAttribute('href', '#main-content')
+    expect(main).toHaveAttribute('id', 'main-content')
+    expect(main).toHaveAttribute('tabindex', '-1')
+
+    main.focus()
+    expect(main).toHaveFocus()
+  })
+
   it('opens a stable lyric route from the fixture shelf', async () => {
     const user = userEvent.setup()
     renderApp()

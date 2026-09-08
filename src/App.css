@@ -402,3 +402,8 @@ html[data-theme='dark'] .reader-comments__item { background: var(--surface); }
 .search-form__mode input:focus-visible+span{outline:3px solid var(--focus-ring);outline-offset:3px}
 
 .cluster-nav{height:80px}.reader-tools{inset-block-start:calc(80px + max(.75rem,env(safe-area-inset-top)))}
+
+/* Keyboard users can move past the cluster route and reader controls. */
+.skip-link{position:fixed;top:12px;left:12px;z-index:40;padding:11px 14px;background:var(--paper-light);border:1px solid var(--line-strong);color:var(--ink);font:11px var(--font-mono);text-decoration:underline;text-underline-offset:4px;transform:translateY(-180%)}
+.skip-link:focus{transform:translateY(0)}
+#main-content:focus{outline:none}

@@ -135,3 +135,6 @@ html[data-theme='light'] .lyric-reader__line-text{color:#052430}
  .lyric-reader__identity,html[data-theme='dark'] .lyric-reader__identity{top:80px}
  .lyric-reader__line-text{font-size:clamp(24px,6.4vw,32px)}
 }
+
+.cluster-nav { gap: 20px; justify-content: space-between; }
+.cluster-nav .community-link { text-transform: none; }

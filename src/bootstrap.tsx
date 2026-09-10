@@ -4,6 +4,7 @@ import { MotionConfig } from 'motion/react'
 import { BrowserRouter } from 'react-router-dom'
 import '@fontsource-variable/newsreader'
 import '@fontsource-variable/manrope'
+import '@fontsource-variable/quicksand'
 import './index.css'
 import App from './App.tsx'
 

@@ -10,6 +10,7 @@
  --identity-text:#123d4c;--identity-edge:#eaf0ed;--focus-ring:#a13e35;
  --font-ui:'DM Sans',Arial,sans-serif;--font-display:'Playfair Display',Georgia,serif;
  --font-mono:'DM Mono',monospace;
+ --font-lyrics:'Quicksand Variable',sans-serif;
 }
 html[data-theme='dark']{
  --paper:#07364b;--paper-light:#10495f;--paper-deep:#052c3f;
@@ -70,7 +71,12 @@ body{background:var(--paper)}
 .lyric-reader__title{font:500 18px/1.4 var(--font-display);color:var(--ink-soft);margin-top:12px}
 .lyric-reader__lines{margin-block-start:320px;gap:32px;padding-bottom:70px}
 .lyric-reader__line{opacity:var(--lyric-reveal-opacity,1)}
-.lyric-reader__line-text{font:500 clamp(25px,3.4vw,39px)/1.4 var(--font-display);letter-spacing:-.025em;color:var(--ink)}
+.lyric-reader__line-text {
+ font: 350 clamp(25px, 3.4vw, 39px)/1.5 var(--font-lyrics);
+ font-style: normal;
+ letter-spacing: -.015em;
+ color: var(--ink);
+}
 .reader-comments__header,.reader-comments__item,.reader-comments__item:nth-child(n),.reader-comments__state{background:var(--surface-solid);border:1px solid var(--line);box-shadow:none;transform:none}
 .reader-comments__header::before,.reader-comments__header::after{display:none}
 .reader-comments__body{font:500 23px/1.5 var(--font-display)}

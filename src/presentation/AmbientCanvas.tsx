@@ -186,16 +186,16 @@ export function AmbientCanvas({ className, input, onFallback }: AmbientCanvasPro
             float tealShift = 0.5 + 0.5 * sin(uColorTime * 0.29 + uBlobC.x * 5.0 + uBlobC.y * 4.0);
             float yellowShift = 0.5 + 0.5 * sin(uColorTime * 0.24 + uBlobD.x * 3.0 - uBlobD.y * 6.0);
             float pinkShift = 0.5 + 0.5 * sin(uColorTime * 0.3 + uBlobE.x * 7.0 + uBlobE.y * 2.0);
-            vec3 coral = mix(vec3(0.63, 0.19, 0.16), vec3(0.78, 0.38, 0.25), coralShift * 0.4);
-            vec3 indigo = mix(vec3(0.18, 0.16, 0.28), vec3(0.34, 0.29, 0.42), indigoShift * 0.4);
-            vec3 teal = mix(vec3(0.20, 0.36, 0.31), vec3(0.38, 0.51, 0.42), tealShift * 0.4);
-            vec3 yellow = mix(vec3(0.62, 0.41, 0.16), vec3(0.82, 0.63, 0.31), yellowShift * 0.4);
-            vec3 pink = mix(vec3(0.46, 0.18, 0.29), vec3(0.64, 0.31, 0.40), pinkShift * 0.4);
-            coral = mix(coral, vec3(0.92, 0.15, 0.31), uTheme);
-            indigo = mix(indigo, vec3(0.43, 0.10, 0.65), uTheme);
-            teal = mix(teal, vec3(0.18, 0.25, 0.24), uTheme);
-            yellow = mix(yellow, vec3(0.45, 0.28, 0.18), uTheme);
-            pink = mix(pink, vec3(0.64, 0.08, 0.38), uTheme);
+            vec3 coral = mix(vec3(0.95, 0.24, 0.18), vec3(1.0, 0.46, 0.22), coralShift * 0.4);
+            vec3 indigo = mix(vec3(0.39, 0.23, 0.85), vec3(0.55, 0.38, 0.96), indigoShift * 0.4);
+            vec3 teal = mix(vec3(0.04, 0.65, 0.55), vec3(0.14, 0.78, 0.64), tealShift * 0.4);
+            vec3 yellow = mix(vec3(0.96, 0.63, 0.14), vec3(1.0, 0.78, 0.30), yellowShift * 0.4);
+            vec3 pink = mix(vec3(0.90, 0.18, 0.48), vec3(1.0, 0.36, 0.60), pinkShift * 0.4);
+            coral = mix(coral, vec3(1.0, 0.09, 0.27), uTheme);
+            indigo = mix(indigo, vec3(0.49, 0.06, 0.94), uTheme);
+            teal = mix(teal, vec3(0.02, 0.53, 0.46), uTheme);
+            yellow = mix(yellow, vec3(0.83, 0.35, 0.06), uTheme);
+            pink = mix(pink, vec3(0.92, 0.04, 0.46), uTheme);
             vec3 blobColor = (coral * a + indigo * b + teal * c + yellow * d + pink * e) / weight;
 
             float merged = smoothstep(0.96, 1.03, total);

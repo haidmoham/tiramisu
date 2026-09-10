@@ -72,7 +72,7 @@ body{background:var(--paper)}
 .lyric-reader__lines{margin-block-start:320px;gap:32px;padding-bottom:70px}
 .lyric-reader__line{opacity:var(--lyric-reveal-opacity,1)}
 .lyric-reader__line-text {
- font: 350 clamp(25px, 3.4vw, 39px)/1.5 var(--font-lyrics);
+ font: 500 clamp(25px, 3.4vw, 39px)/1.5 var(--font-lyrics);
  font-style: normal;
  letter-spacing: -.015em;
  color: var(--ink);

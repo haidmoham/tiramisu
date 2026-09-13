@@ -6,6 +6,10 @@ Search and lyric presentation are separate layers. The browser searches LRCLIB f
 
 The three default searches are This Modern Love by Bloc Party, Melancholy by Driveways, and cbd by brakence.
 
+**[Open tiramisu](https://tiramisu.shin86.dev)**
+
+This is a lyric reader, not a music player or synchronized karaoke display. Community-provider lookup can fail for individual tracks.
+
 ## Run locally
 
 ```bash
@@ -37,3 +41,7 @@ Keep the shared `← shin86.dev` link outside the route switch. Direct lyric lin
 - `src/presentation/` owns semantic lyric rendering and the isolated Three.js field.
 
 The presentation layer never consumes provider response objects. WebGL is an enhancement: lookup, reading, focus mode, native scrolling, and accessibility remain available without it.
+
+## Optional Genius notes
+
+The reader also has a separate comments/notes panel. `api/genius-comments/` serves it through a Vercel function; `server/genius-comments/` normalizes the response. Set `GENIUS_ACCESS_TOKEN` only on the server to enable it. Plain `npm run dev` serves the Vite frontend, not that production function. The panel can report unavailable notes and retain an explicit Genius source link; lyric lookup does not depend on it.

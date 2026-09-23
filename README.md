@@ -1,10 +1,10 @@
 # tiramisu
 
-A mobile-first lyric lookup where semantic typography stays in the foreground and a direct Three.js scene supplies the atmosphere behind it.
+A mobile-first lyric lookup where semantic typography stays in the foreground and a p5 canvas of cherry blossoms supplies the atmosphere behind it.
 
 Search and lyric presentation are separate layers. The browser searches LRCLIB first, uses lyrics.ovh only for metadata discovery when needed, and resolves lyric documents through LRCLIB or LrcMux. Provider responses are normalized before they reach the reader, so the sources can change without redesigning the presentation.
 
-The three default searches are This Modern Love by Bloc Party, Melancholy by Driveways, and cbd by brakence.
+The three default searches are This Modern Love by Bloc Party, Melancholy by Driveways, and cbd by brakence. The featured This Modern Love entry uses a verified LRCLIB record. An old saved LrcMux link that returns 404 can recover through an exact title-and-artist LRCLIB match.
 
 **[Open tiramisu](https://tiramisu.shin86.dev)**
 
@@ -38,9 +38,9 @@ Keep the shared `← shin86.dev` link outside the route switch. Direct lyric lin
 - `src/domain/` defines normalized lyric and provider interfaces.
 - `src/lookup/` owns fixture, LRCLIB, LrcMux, and aggregate provider adapters.
 - `src/app/` owns deterministic lookup state.
-- `src/presentation/` owns semantic lyric rendering and the isolated Three.js field.
+- `src/presentation/` owns semantic lyric rendering and the decorative p5 canvas.
 
-The presentation layer never consumes provider response objects. WebGL is an enhancement: lookup, reading, focus mode, native scrolling, and accessibility remain available without it.
+The presentation layer never consumes provider response objects. The canvas is decorative: lookup, reading, focus mode, native scrolling, and accessibility remain available without motion. Reduced-motion preference keeps a still composition.
 
 ## Optional Genius notes
 

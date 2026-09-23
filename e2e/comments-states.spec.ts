@@ -27,7 +27,7 @@ async function fulfillJson(route: Route, body: unknown): Promise<void> {
 }
 
 async function openCommentsState(page: Page, state: CommentsState): Promise<void> {
-  await page.route('https://api.lrcmux.dev/get', async (route) => fulfillJson(route, TRACK_DOCUMENT))
+  await page.route('https://api.lrcmux.dev/get?**', async (route) => fulfillJson(route, TRACK_DOCUMENT))
   await page.route('**/api/genius-comments?**', async (route) => {
     if (state === 'loading') return new Promise(() => {})
     if (state === 'populated') {

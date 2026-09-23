@@ -35,9 +35,8 @@ export function LyricReader({
       if (!identity) return
 
       const identityBounds = identity.getBoundingClientRect()
-      const anchor = state.focusMode
-        ? Math.max(72, Math.min(window.innerHeight * 0.18, 160))
-        : identityBounds.bottom + 8
+      // The tail uses a viewport anchor; sticky identity movement must not resize the page.
+      const anchor = Math.max(72, Math.min(window.innerHeight * 0.18, 160))
       const lines = document.lines
         .map((line) => lineRefs.current.get(line.id))
         .filter((line): line is HTMLLIElement => Boolean(line))

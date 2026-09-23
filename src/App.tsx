@@ -14,7 +14,7 @@ import { ThemeToggle } from './presentation/ThemeToggle'
 import { ThemeProvider } from './theme'
 import './styles/presentation.css'
 import './App.css'
-import './styles/blog-grammar.css'
+import './styles/bloom.css'
 
 const defaultProvider = new TiramisuLyricsProvider()
 const AmbientCanvas = lazy(async () => {
@@ -128,7 +128,7 @@ function SearchView({
 
   return (
     <main id="main-content" className="search-view" tabIndex={-1}>
-      <AmbientLayer />
+      <AmbientLayer variant="search" />
       <div className="search-view__frame">
         <header className="search-view__masthead">
           <h1 className="wordmark">
@@ -141,6 +141,7 @@ function SearchView({
         </header>
 
         <section className="search-hero" aria-label="Lyric search">
+          <div className="canopy-space canopy-space--search" aria-hidden="true" />
           <form
             className="search-form"
             role="search"
@@ -288,7 +289,6 @@ function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
   const navigate = useNavigate()
   const lyricsRequestId = useRef(0)
   const [focusMode, setFocusMode] = useState(false)
-  const [canvasAvailable, setCanvasAvailable] = useState(true)
   const [trackComments, setTrackComments] = useState<TrackCommentsState>(initialTrackCommentsState)
   const commentsController = useRef<AbortController | null>(null)
   const commentsRequestId = useRef(0)
@@ -330,7 +330,8 @@ function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
   if (state.selectedTrackId === trackId && state.lyricsStatus === 'error') {
     return (
       <main id="main-content" className="reader-state" tabIndex={-1}>
-        <AmbientLayer />
+        <AmbientLayer variant="reader" />
+        <div className="canopy-space canopy-space--reader" aria-hidden="true" />
         <p className="eyebrow">The page is missing</p>
         <h1>That lyric sheet could not be found.</h1>
         <p>{state.lyricsError}</p>
@@ -344,7 +345,8 @@ function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
   if (!document) {
     return (
       <main id="main-content" className="reader-state" tabIndex={-1} aria-busy="true">
-        <AmbientLayer />
+        <AmbientLayer variant="reader" />
+        <div className="canopy-space canopy-space--reader" aria-hidden="true" />
         <span className="reader-state__loader" aria-hidden="true" />
         <p>Opening the lyric sheet…</p>
       </main>
@@ -434,10 +436,10 @@ function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
   }
 
   return (
-    <main id="main-content" className="reader-view" tabIndex={-1} data-focus={focusMode} data-canvas={canvasAvailable}>
-      {canvasAvailable ? <AmbientLayer onFallback={() => setCanvasAvailable(false)} /> : null}
+    <main id="main-content" className="reader-view" tabIndex={-1} data-focus={focusMode}>
+      <AmbientLayer variant="reader" />
       <nav className="reader-tools" aria-label="Reader controls">
-        <button className="reader-tools__back" type="button" onClick={() => navigate('/')}>
+        <button className="reader-tools__back" tabIndex={focusMode ? -1 : 0} type="button" onClick={() => navigate('/')}>
           <span aria-hidden="true">←</span>
           <span>Search</span>
         </button>
@@ -476,6 +478,7 @@ function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
           <FocusModeToggle isFocused={focusMode} onToggle={setFocus} />
         </div>
       </nav>
+      <div className="canopy-space canopy-space--reader" aria-hidden="true" />
       <section
         id="reader-lyrics-panel"
         role="tabpanel"

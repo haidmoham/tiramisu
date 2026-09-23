@@ -1,490 +1,576 @@
 import { useEffect, useRef } from 'react'
-import * as THREE from 'three'
+import type p5 from 'p5'
 
 export interface AmbientCanvasProps {
   className?: string
-  /** Normalized canvas coordinates (0..1) supplied by the app when available. */
-  input?: AmbientInput
-  onFallback?: (reason: 'context-lost' | 'webgl-unavailable') => void
+  variant?: 'search' | 'reader'
 }
 
-export interface AmbientInput {
+interface Palette {
+  ink: string
+  muted: string
+  accent: string
+  secondary: string
+  surface: string
+  petals?: string[]
+}
+
+interface FallingPetal {
   x: number
   y: number
-  isActive: boolean
+  velocityX: number
+  velocityY: number
+  rotation: number
+  rotationSpeed: number
+  size: number
+  age: number
+  isStill?: boolean
+  tone?: number
 }
 
-type Blob = {
-  base: THREE.Vector2
-  position: THREE.Vector2
-  target: THREE.Vector2
-  velocity: THREE.Vector2
-  radius: number
-  phase: number
-  drift: THREE.Vector2
-  uniform: THREE.Vector4
+const MAX_PETALS = 30
+const PETAL_LIFETIME_SECONDS = 32
+const EMISSION_INTERVAL_MS = 85
+
+const DEFAULT_PALETTE: Palette = {
+  ink: '#373249',
+  muted: '#655D7B',
+  accent: '#7860A2',
+  secondary: '#ABBFAE',
+  surface: '#F6F4FA',
 }
 
-const MAX_PIXEL_RATIO = 1.5
-const TOUCH_DECAY_MS = 1200
-const BLOB_SPRING = 9
-const BLOB_DAMPING = 2.8
+function readPalette(): Palette {
+  const styles = getComputedStyle(document.documentElement)
+  const read = (name: string, fallback: string) => styles.getPropertyValue(name).trim() || fallback
+  return {
+    ink: read('--ink', DEFAULT_PALETTE.ink),
+    muted: read('--ink-soft', DEFAULT_PALETTE.muted),
+    accent: read('--accent', DEFAULT_PALETTE.accent),
+    secondary: read('--secondary', DEFAULT_PALETTE.secondary),
+    surface: read('--surface-solid', DEFAULT_PALETTE.surface),
+    petals: [
+      read('--petal-lilac', '#947BA9'), read('--petal-lilac', '#947BA9'),
+      read('--petal-rose', '#AE839C'), read('--petal-lilac', '#947BA9'),
+      read('--petal-rose', '#AE839C'), read('--petal-blue', '#789AAA'),
+      read('--petal-lilac', '#947BA9'), read('--petal-rose', '#AE839C'),
+      read('--petal-blue', '#789AAA'), read('--petal-peach', '#C09C96'),
+    ],
+  }
+}
 
 function clamp(value: number, minimum: number, maximum: number) {
-  return Math.min(Math.max(value, minimum), maximum)
+  return Math.min(maximum, Math.max(minimum, value))
 }
 
-function createBlobs(): Blob[] {
-  const definitions = [
-    { x: 0.18, y: 0.25, radius: 0.25, phase: 0.4, driftX: 0.065, driftY: 0.05 },
-    { x: 0.55, y: 0.21, radius: 0.27, phase: 2.1, driftX: 0.075, driftY: 0.055 },
-    { x: 0.79, y: 0.48, radius: 0.235, phase: 4.2, driftX: 0.06, driftY: 0.075 },
-    { x: 0.43, y: 0.63, radius: 0.29, phase: 5.3, driftX: 0.085, driftY: 0.06 },
-    { x: 0.12, y: 0.76, radius: 0.22, phase: 3.3, driftX: 0.055, driftY: 0.07 },
+function createStillPetals(width: number, height: number): FallingPetal[] {
+  return [
+    { x: width * 0.78, y: height * 0.44, velocityX: 0, velocityY: 0, rotation: -0.45, rotationSpeed: 0, size: 17, age: 0, isStill: true },
+    { x: width * 0.86, y: height * 0.55, velocityX: 0, velocityY: 0, rotation: 0.7, rotationSpeed: 0, size: 20, age: 0, isStill: true },
   ]
-
-  return definitions.map((definition) => {
-    const base = new THREE.Vector2(definition.x, definition.y)
-    return {
-      base,
-      position: base.clone(),
-      target: base.clone(),
-      velocity: new THREE.Vector2(),
-      radius: definition.radius,
-      phase: definition.phase,
-      drift: new THREE.Vector2(definition.driftX, definition.driftY),
-      uniform: new THREE.Vector4(definition.x, definition.y, definition.radius, 1),
-    }
-  })
 }
 
-/**
- * A five-color metaball field. Its one render loop drives a slow idle dance and
- * spring-based interaction, while the canvas itself remains non-interactive so
- * it cannot take ownership of page gestures.
- */
-export function AmbientCanvas({ className, input, onFallback }: AmbientCanvasProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const fallbackReported = useRef(false)
-  const inputRef = useRef<AmbientInput | undefined>(input)
-  const fallbackCallbackRef = useRef(onFallback)
-  const requestRenderRef = useRef<(() => void) | null>(null)
+/** A quiet p5 branch study. Its drawing is removed from every live text surface. */
+export function AmbientCanvas({ className, variant = 'reader' }: AmbientCanvasProps) {
+  const hostRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    inputRef.current = input
-    requestRenderRef.current?.()
-  }, [input])
+    const host = hostRef.current
+    if (!host) return undefined
 
-  useEffect(() => {
-    fallbackCallbackRef.current = onFallback
-  }, [onFallback])
-
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return undefined
-
-    const reportFallback = (reason: 'context-lost' | 'webgl-unavailable') => {
-      if (fallbackReported.current) return
-      fallbackReported.current = true
-      fallbackCallbackRef.current?.(reason)
-    }
-
-    let renderer: THREE.WebGLRenderer
-    try {
-      renderer = new THREE.WebGLRenderer({
-        canvas,
-        antialias: false,
-        alpha: false,
-        powerPreference: 'low-power',
-      })
-    } catch {
-      reportFallback('webgl-unavailable')
-      return undefined
-    }
-
-    const isDarkTheme = () => document.documentElement.dataset.theme === 'dark'
-    renderer.setClearColor(isDarkTheme() ? 0x140817 : 0xf4eedf, 1)
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO))
-
-    const scene = new THREE.Scene()
-    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -1, 1)
-    const blobs = createBlobs()
-    const uniforms = {
-      uPointer: { value: new THREE.Vector2(0.5, 0.5) },
-      uResolution: { value: new THREE.Vector2(1, 1) },
-      uInteraction: { value: 0 },
-      uColorTime: { value: 0 },
-      uRippleTime: { value: 0 },
-      uTheme: { value: isDarkTheme() ? 1 : 0 },
-      uBlobA: { value: blobs[0].uniform },
-      uBlobB: { value: blobs[1].uniform },
-      uBlobC: { value: blobs[2].uniform },
-      uBlobD: { value: blobs[3].uniform },
-      uBlobE: { value: blobs[4].uniform },
-    }
-    const field = new THREE.Mesh(
-      new THREE.PlaneGeometry(2, 2),
-      new THREE.ShaderMaterial({
-        uniforms,
-        vertexShader: `
-          varying vec2 vUv;
-          void main() {
-            vUv = uv;
-            gl_Position = vec4(position, 1.0);
-          }
-        `,
-        fragmentShader: `
-          varying vec2 vUv;
-          uniform vec2 uPointer;
-          uniform vec2 uResolution;
-          uniform float uInteraction;
-          uniform float uColorTime;
-          uniform float uRippleTime;
-          uniform float uTheme;
-          uniform vec4 uBlobA;
-          uniform vec4 uBlobB;
-          uniform vec4 uBlobC;
-          uniform vec4 uBlobD;
-          uniform vec4 uBlobE;
-
-          float blobField(vec2 point, vec4 blob) {
-            float aspect = uResolution.x / max(uResolution.y, 1.0);
-            vec2 center = vec2(blob.x * aspect, blob.y);
-            vec2 pointer = vec2(uPointer.x * aspect, uPointer.y);
-            vec2 pull = pointer - center;
-            float angle = atan(pull.y, pull.x);
-            vec2 delta = point - center;
-            float radial = length(delta);
-            float ripple = 1.0
-              + sin(radial * 30.0 - uRippleTime * 2.2 + blob.x * 9.0) * (0.045 + uInteraction * 0.035)
-              + sin(radial * 17.0 + uRippleTime * 1.35 + blob.y * 11.0) * 0.028;
-            float cosine = cos(angle);
-            float sine = sin(angle);
-            vec2 local = vec2(
-              cosine * delta.x + sine * delta.y,
-              -sine * delta.x + cosine * delta.y
-            );
-            local.x /= blob.w;
-            local.y *= sqrt(blob.w);
-            local /= ripple;
-            return (blob.z * blob.z) / (dot(local, local) + 0.0015);
-          }
-
-          void main() {
-            float aspect = uResolution.x / max(uResolution.y, 1.0);
-            vec2 point = vec2(vUv.x * aspect, vUv.y);
-            float a = blobField(point, uBlobA);
-            float b = blobField(point, uBlobB);
-            float c = blobField(point, uBlobC);
-            float d = blobField(point, uBlobD);
-            float e = blobField(point, uBlobE);
-            float total = a + b + c + d + e;
-
-            float weight = max(total, 0.001);
-            float coralShift = 0.5 + 0.5 * sin(uColorTime * 0.32 + uBlobA.x * 6.0 + uBlobA.y * 3.0);
-            float indigoShift = 0.5 + 0.5 * sin(uColorTime * 0.27 + uBlobB.x * 4.0 - uBlobB.y * 5.0);
-            float tealShift = 0.5 + 0.5 * sin(uColorTime * 0.29 + uBlobC.x * 5.0 + uBlobC.y * 4.0);
-            float yellowShift = 0.5 + 0.5 * sin(uColorTime * 0.24 + uBlobD.x * 3.0 - uBlobD.y * 6.0);
-            float pinkShift = 0.5 + 0.5 * sin(uColorTime * 0.3 + uBlobE.x * 7.0 + uBlobE.y * 2.0);
-            vec3 coral = mix(vec3(0.95, 0.24, 0.18), vec3(1.0, 0.46, 0.22), coralShift * 0.4);
-            vec3 indigo = mix(vec3(0.39, 0.23, 0.85), vec3(0.55, 0.38, 0.96), indigoShift * 0.4);
-            vec3 teal = mix(vec3(0.04, 0.65, 0.55), vec3(0.14, 0.78, 0.64), tealShift * 0.4);
-            vec3 yellow = mix(vec3(0.96, 0.63, 0.14), vec3(1.0, 0.78, 0.30), yellowShift * 0.4);
-            vec3 pink = mix(vec3(0.90, 0.18, 0.48), vec3(1.0, 0.36, 0.60), pinkShift * 0.4);
-            coral = mix(coral, vec3(1.0, 0.09, 0.27), uTheme);
-            indigo = mix(indigo, vec3(0.49, 0.06, 0.94), uTheme);
-            teal = mix(teal, vec3(0.02, 0.53, 0.46), uTheme);
-            yellow = mix(yellow, vec3(0.83, 0.35, 0.06), uTheme);
-            pink = mix(pink, vec3(0.92, 0.04, 0.46), uTheme);
-            vec3 blobColor = (coral * a + indigo * b + teal * c + yellow * d + pink * e) / weight;
-
-            float merged = smoothstep(0.96, 1.03, total);
-            float contour = smoothstep(0.90, 0.96, total) - smoothstep(1.03, 1.09, total);
-            float contact = 1.0 - smoothstep(0.0, 0.2, length(vUv - uPointer));
-            vec3 paper = mix(vec3(0.957, 0.933, 0.875), vec3(0.078, 0.031, 0.090), uTheme);
-            vec3 color = mix(paper, blobColor, merged);
-            color = mix(color, mix(vec3(0.16, 0.11, 0.14), vec3(0.18, 0.04, 0.22), uTheme), contour * 0.38);
-            color += blobColor * contact * uInteraction * 0.08;
-            gl_FragColor = vec4(color, 1.0);
-          }
-        `,
-        depthWrite: false,
-        depthTest: false,
-      }),
-    )
-    scene.add(field)
-
-    let animationFrame = 0
-    let lastFrame = performance.now()
-    let isVisible = !document.hidden
-    let decayStartedAt: number | null = null
-    let mouseFine = false
-    let activeTouch = false
-    let targetInteraction = 0
-    let currentInteraction = 0
-    let colorTime = 0
+    let disposed = false
+    let sketch: p5 | undefined
+    let cleanupSketchEvents = () => {}
+    let lastBreeze = performance.now()
+    let pointerBreeze = 0
+    let pointerX = window.innerWidth * 0.5
+    let pointerY = window.innerHeight * 0.5
+    let pointerIsActive = false
+    let fallingPetals: FallingPetal[] = []
+    let blossomAnchors: { x: number; y: number }[] = []
+    let fallingLeaves: FallingPetal[] = []
+    let nextLeafAt = performance.now() + 2200
+    let lastEmission = 0
+    let pointerPhase = 0
+    let pointerKind = 'mouse'
+    let lastPointerMove = 0
+    let geometryDirty = true
+    let paletteDirty = true
+    let lastPetalFrame = performance.now()
+    let nextPetalAt = performance.now() + 900
+    let petalTimer: number | null = null
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
-    const targetPointer = new THREE.Vector2(0.5, 0.5)
-    const currentPointer = new THREE.Vector2(0.5, 0.5)
-    const lastTouch = new THREE.Vector2(0.5, 0.5)
-    const towardPointer = new THREE.Vector2()
-    const springDelta = new THREE.Vector2()
 
-    const render = () => renderer.render(scene, camera)
-
-    const syncTheme = () => {
-      const dark = isDarkTheme()
-      uniforms.uTheme.value = dark ? 1 : 0
-      renderer.setClearColor(dark ? 0x140817 : 0xf4eedf, 1)
+    const schedulePetals = () => {
+      if (petalTimer !== null || reducedMotion.matches || document.hidden || disposed) return
+      const delay = Math.max(100, Math.min(nextPetalAt, nextLeafAt) - performance.now())
+      petalTimer = window.setTimeout(() => {
+        petalTimer = null
+        if (!disposed && !document.hidden && !reducedMotion.matches) sketch?.redraw()
+      }, delay)
     }
 
-    const syncUniforms = () => {
-      uniforms.uPointer.value.copy(currentPointer)
-      syncTheme()
-      uniforms.uInteraction.value = currentInteraction
-      uniforms.uColorTime.value = colorTime
-      uniforms.uRippleTime.value = reducedMotion.matches ? 0 : colorTime
-      const rippleStrength = reducedMotion.matches ? 0 : 0.35 + currentInteraction * 0.65
-      const rippleX = ((currentPointer.x - 0.5) * 3.2 + Math.sin(colorTime * 1.7) * 0.7) * rippleStrength
-      const rippleY = ((0.5 - currentPointer.y) * 2.4 + Math.cos(colorTime * 1.35) * 0.55) * rippleStrength
-      const rootStyle = document.documentElement.style
-      rootStyle.setProperty('--lyrics-ripple-x', `${rippleX.toFixed(2)}px`)
-      rootStyle.setProperty('--lyrics-ripple-y', `${rippleY.toFixed(2)}px`)
-      rootStyle.setProperty('--lyrics-ripple-x-reverse', `${(-rippleX * 0.72).toFixed(2)}px`)
-      rootStyle.setProperty('--lyrics-ripple-y-reverse', `${(-rippleY * 0.72).toFixed(2)}px`)
-    }
+    void import('p5').then(({ default: P5 }) => {
+      if (disposed) return
 
-    const resize = () => {
-      const rect = canvas.getBoundingClientRect()
-      const width = Math.max(1, rect.width)
-      const height = Math.max(1, rect.height)
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO))
-      renderer.setSize(width, height, false)
-      uniforms.uResolution.value.set(width, height)
-      syncUniforms()
-      render()
-    }
+      sketch = new P5((p) => {
+        let palette = readPalette()
+        let width = window.innerWidth
+        let height = window.innerHeight
+        let textExclusions: DOMRect[] = []
+        let navigationBottom = 80
 
-    const readExternalInput = () => {
-      const externalInput = inputRef.current
-      if (!externalInput) return false
-      targetPointer.set(clamp(externalInput.x, 0, 1), 1 - clamp(externalInput.y, 0, 1))
-      activeTouch = externalInput.isActive
-      mouseFine = false
-      targetInteraction = externalInput.isActive ? 1 : 0
-      decayStartedAt = null
-      return true
-    }
-
-    const updateBlobTargets = (now: number, direct = false, deltaSeconds = 1 / 60) => {
-      const idleTime = reducedMotion.matches ? 0 : now / 1000
-      const touchStrength = activeTouch ? 1 : mouseFine ? 0.62 : 0
-
-      blobs.forEach((blob) => {
-        const idleX = (Math.sin(idleTime * 0.58 + blob.phase) + Math.sin(idleTime * 0.23 + blob.phase * 1.7) * 0.42) * blob.drift.x
-        const idleY = (Math.cos(idleTime * 0.46 + blob.phase * 1.3) + Math.sin(idleTime * 0.19 + blob.phase * 0.8) * 0.4) * blob.drift.y
-        blob.target.set(blob.base.x + idleX, blob.base.y + idleY)
-
-        towardPointer.copy(targetPointer).sub(blob.target)
-        const distance = towardPointer.length()
-        const influence = touchStrength * Math.pow(clamp(1 - distance / 0.9, 0, 1), 1.7)
-        blob.target.addScaledVector(towardPointer, 0.38 * influence)
-
-        const stretch = 1 + influence * (activeTouch ? 1.85 : 1.08) + Math.abs(Math.sin(idleTime + blob.phase)) * 0.1
-        if (direct) {
-          blob.position.copy(blob.target)
-          blob.velocity.set(0, 0)
-        } else {
-          springDelta.copy(blob.target).sub(blob.position)
-          blob.velocity.addScaledVector(springDelta, BLOB_SPRING * deltaSeconds)
-          blob.velocity.multiplyScalar(Math.exp(-BLOB_DAMPING * deltaSeconds))
-          blob.position.addScaledVector(blob.velocity, deltaSeconds)
+        p.setup = () => {
+          p.pixelDensity(Math.min(window.devicePixelRatio || 1, 1.5))
+          p.createCanvas(width, height)
+          p.frameRate(60)
+          p.noLoop()
+          if (p.canvas) p.canvas.setAttribute('aria-hidden', 'true')
+          if (reducedMotion.matches) fallingPetals = createStillPetals(width, height)
+          p.redraw()
         }
-        blob.uniform.set(blob.position.x, blob.position.y, blob.radius, stretch)
-      })
-    }
 
-    const tick = (now: number) => {
-      const elapsed = Math.min((now - lastFrame) / 1000, 0.05)
-      lastFrame = now
-      const hasExternalInput = readExternalInput()
-      if (!hasExternalInput && decayStartedAt !== null) {
-        const elapsedTouch = now - decayStartedAt
-        targetPointer.copy(lastTouch)
-        targetInteraction = clamp(1 - elapsedTouch / TOUCH_DECAY_MS, 0, 1)
-        if (elapsedTouch >= TOUCH_DECAY_MS) decayStartedAt = null
+        p.draw = () => {
+          const now = performance.now()
+          paint(now)
+          const branchIsMoving = !reducedMotion.matches && now - lastBreeze <= 1600
+          const petalsAreMoving = !reducedMotion.matches && (fallingPetals.length > 0 || fallingLeaves.length > 0)
+          if (document.hidden || reducedMotion.matches || (!branchIsMoving && !petalsAreMoving)) {
+            p.noLoop()
+            schedulePetals()
+            return
+          }
+          p.loop()
+        }
+
+        p.windowResized = () => {
+          width = window.innerWidth
+          height = window.innerHeight
+          geometryDirty = true
+          p.resizeCanvas(width, height)
+          p.redraw()
+        }
+
+        function paint(now: number) {
+          if (!p.canvas) return
+          const activeTime = now - lastBreeze
+          const settle = reducedMotion.matches || document.hidden || activeTime > 1600
+            ? 0
+            : Math.exp(-activeTime / 650)
+          const breeze = settle * (Math.sin(activeTime * 0.007) * 1.5 + pointerBreeze * 3.2)
+          if (paletteDirty) {
+            palette = readPalette()
+            paletteDirty = false
+          }
+          if (geometryDirty) {
+            textExclusions = getTextExclusions()
+            navigationBottom = Math.max(80, document.querySelector('.cluster-nav')?.getBoundingClientRect().bottom ?? 80)
+            geometryDirty = false
+          }
+
+          p.clear()
+          const context = p.drawingContext
+          context.save()
+          drawBranch(breeze)
+          drawAutumnFrame(textExclusions)
+          drawFallingLeaves(now, textExclusions)
+          drawFallingPetals(now, textExclusions)
+          context.restore()
+        }
+
+        function drawBranch(breeze: number) {
+          const top = navigationBottom
+          const bounds = new DOMRect(0, top, width, Math.max(360, height - top))
+          const context = p.drawingContext as CanvasRenderingContext2D
+          const compact = width <= 700
+          const anchors = [
+            [.19,.72,.7], [.37,.49,.94], [.55,.73,.83],
+            [.62,.29,1.13], [.83,.49,1], [.91,.12,.66],
+          ]
+          const baseRadius = compact ? Math.min(85, width * .21) : Math.min(185, width * .16)
+          blossomAnchors = anchors.map(([x, y]) => ({ x: bounds.left + bounds.width * x, y: bounds.top + bounds.height * y }))
+          context.save()
+          context.strokeStyle = palette.muted
+          context.globalAlpha = 0.52
+          context.lineWidth = compact ? 1.2 : 1.8
+          context.lineCap = 'round'
+          context.beginPath()
+          context.moveTo(width * .04, bounds.top + bounds.height * .85)
+          context.bezierCurveTo(width * .34, bounds.top + bounds.height * .31,
+            width * .73, bounds.top + bounds.height * .66, width + 35, bounds.top + bounds.height * .14)
+          context.stroke()
+          blossomAnchors.forEach((anchor, index) => {
+            context.beginPath()
+            context.moveTo(anchor.x + baseRadius * 0.4, anchor.y + baseRadius * 0.48)
+            context.quadraticCurveTo(anchor.x + 12, anchor.y + 5, anchor.x, anchor.y)
+            context.stroke()
+            drawBlossom(anchor.x, anchor.y, baseRadius * anchors[index][2], breeze * 0.5, index)
+          })
+          context.restore()
+        }
+
+        function drawLeaf(x: number, y: number, size: number, rotation: number, opacity: number) {
+          const context = p.drawingContext as CanvasRenderingContext2D
+          context.save()
+          context.translate(x, y)
+          context.rotate(rotation)
+          context.globalAlpha = opacity
+          context.fillStyle = '#A68076'
+          context.strokeStyle = '#807B71'
+          context.lineWidth = 0.65
+          context.beginPath()
+          // An original lobed silhouette, separate from the round blossom petals.
+          const points = [[0,-1],[.23,-.42],[.64,-.65],[.52,-.1],[.93,.02],[.45,.37],[.53,.7],[.08,.5],[-.3,.77],[-.32,.37],[-.82,.13],[-.43,-.1],[-.56,-.6],[-.14,-.4]]
+          points.forEach(([px, py], index) => {
+            if (index === 0) context.moveTo(px * size, py * size)
+            else context.lineTo(px * size, py * size)
+          })
+          context.closePath()
+          context.fill()
+          context.beginPath()
+          context.moveTo(0, -size * .72)
+          context.lineTo(0, size * .83)
+          context.moveTo(0, size * .22)
+          context.lineTo(-size * .42, -size * .1)
+          context.moveTo(0, 0)
+          context.lineTo(size * .38, -size * .22)
+          context.stroke()
+          context.restore()
+        }
+
+        function drawAutumnFrame(exclusions: DOMRect[]) {
+          const context = p.drawingContext as CanvasRenderingContext2D
+          const edge = width < 701 ? 9 : 26
+          context.save()
+          context.globalAlpha = .16
+          context.strokeStyle = '#A68076'
+          context.lineWidth = .8
+          context.beginPath()
+          context.moveTo(-12, height * .66)
+          context.bezierCurveTo(edge * 2, height * .75, edge, height * .88, edge * 3, height + 15)
+          context.stroke()
+          context.restore()
+          for (let index = 0; index < 3; index += 1) {
+            const x = edge + index * edge * .3
+            const y = height * (.74 + index * .09)
+            drawLeaf(x, y, width < 701 ? 10 : 18, -.6 + index * .7, .2 * fadeAtTextEdges(x, y, exclusions, 20))
+          }
+        }
+
+        function drawFallingLeaves(now: number, exclusions: DOMRect[]) {
+          if (reducedMotion.matches || document.hidden) return
+          if (now >= nextLeafAt) {
+            if (fallingLeaves.length < (width <= 700 ? 1 : 2)) {
+              fallingLeaves.push({ x: width - (width <= 700 ? 12 : 38), y: height * .36, velocityX: 0, velocityY: 17,
+                rotation: .4, rotationSpeed: .12, size: width <= 700 ? 11 : 16, age: 0 })
+            }
+            nextLeafAt = now + 10500
+          }
+          const elapsed = clamp((now - lastPetalFrame) / 1000, 0, .05)
+          fallingLeaves = fallingLeaves.filter(leaf => leaf.age < 18 && leaf.y < height + 30)
+          fallingLeaves.forEach(leaf => {
+            leaf.age += elapsed
+            leaf.y += leaf.velocityY * elapsed
+            leaf.x += Math.sin(leaf.age * .7) * 3 * elapsed
+            leaf.rotation += leaf.rotationSpeed * elapsed
+            const lifeFade = Math.min(leaf.age, 18 - leaf.age, 1)
+            drawLeaf(leaf.x, leaf.y, leaf.size, leaf.rotation, .38 * lifeFade * fadeAtTextEdges(leaf.x, leaf.y, exclusions, leaf.size))
+          })
+        }
+
+        function drawBlossom(x: number, y: number, radius: number, breeze: number, seed: number) {
+          const context = p.drawingContext
+          context.save()
+          context.translate(x + breeze, y)
+          context.rotate(seed * 0.42 + breeze * 0.015)
+          context.strokeStyle = palette.accent
+          context.lineWidth = 0.8
+          context.fillStyle = palette.petals?.[seed % 10] ?? palette.accent
+          context.globalAlpha = document.documentElement.dataset.theme === 'dark' ? .24 : .22
+
+          for (let petal = 0; petal < 5; petal += 1) {
+            context.save()
+            context.rotate((Math.PI * 2 * petal) / 5 + Math.sin(seed + petal * 3) * .06)
+            context.scale(1, .9 + .1 * Math.sin(seed * 2 + petal))
+            context.beginPath()
+            context.moveTo(0, 0)
+            context.bezierCurveTo(-radius * 0.39, -radius * 0.34, -radius * 0.36, -radius * 0.9, -radius * 0.09, -radius)
+            context.quadraticCurveTo(0, -radius * 0.86, radius * 0.09, -radius)
+            context.bezierCurveTo(radius * 0.36, -radius * 0.9, radius * 0.39, -radius * 0.34, 0, 0)
+            context.closePath()
+            context.fill()
+            context.globalAlpha = .6
+            context.stroke()
+            context.restore()
+          }
+
+          context.globalAlpha = .55
+          context.strokeStyle = palette.secondary
+          context.fillStyle = palette.accent
+          context.lineWidth = 0.65
+          for (let stamen = 0; stamen < 5; stamen += 1) {
+            const angle = (Math.PI * 2 * stamen) / 5 + seed * 0.3
+            const endX = Math.cos(angle) * radius * 0.26
+            const endY = Math.sin(angle) * radius * 0.26
+            context.beginPath()
+            context.moveTo(0, 0)
+            context.lineTo(endX, endY)
+            context.stroke()
+            context.beginPath()
+            context.arc(endX, endY, radius * 0.025, 0, Math.PI * 2)
+            context.fill()
+          }
+
+          context.beginPath()
+          context.fillStyle = palette.secondary
+          context.arc(0, 0, radius * 0.17, 0, Math.PI * 2)
+          context.fill()
+          context.beginPath()
+          context.fillStyle = palette.accent
+          context.arc(radius * 0.18, -radius * 0.08, radius * 0.045, 0, Math.PI * 2)
+          context.fill()
+          context.restore()
+        }
+
+        function spawnPetalBurst(now: number) {
+          const sources = blossomAnchors
+          if (sources.length === 0) return
+          const available = Math.max(0, 10 - fallingPetals.length)
+          const count = Math.min(2, available)
+          for (let index = 0; index < count; index += 1) {
+            const source = sources[(Math.floor(now / 7000) + index) % sources.length]
+            const jitter = Math.sin(now * 0.003 + index * 2.1)
+            fallingPetals.push({
+              x: source.x + jitter * 8,
+              y: source.y,
+              velocityX: jitter * 7,
+              velocityY: 4 + index * 1.8,
+              rotation: jitter,
+              rotationSpeed: jitter * 0.7,
+              size: clamp(Math.min(width, height) * 0.035, 12, 28) + index * 2,
+              age: 0,
+              tone: (Math.floor(now / 1800) + index) % 10,
+            })
+          }
+          nextPetalAt = now + 1800
+        }
+
+        function drawFallingPetals(now: number, textExclusions: DOMRect[]) {
+          if (!reducedMotion.matches && !document.hidden && now >= nextPetalAt) spawnPetalBurst(now)
+          const elapsed = clamp((now - lastPetalFrame) / 1000, 0, 0.05)
+          lastPetalFrame = now
+          const context = p.drawingContext
+
+          fallingPetals = fallingPetals.filter((petal) => petal.isStill || (petal.age < PETAL_LIFETIME_SECONDS && petal.y < height + 30))
+          fallingPetals.forEach((petal, index) => {
+            if (!petal.isStill && !reducedMotion.matches && !document.hidden) {
+              petal.age += elapsed
+              petal.velocityY += 8 * elapsed
+              petal.velocityX += Math.sin(petal.age * 1.7 + petal.rotation) * elapsed * 4
+              if (pointerIsActive) {
+                const stillness = clamp((now - lastPointerMove - 100) / 850, 0, 1)
+                const settle = stillness * stillness * (3 - 2 * stillness)
+                const deltaX = pointerX - petal.x
+                const deltaY = pointerY - petal.y
+                const distance = Math.max(1, Math.hypot(deltaX, deltaY))
+                const unitX = deltaX / distance
+                const unitY = deltaY / distance
+                const reach = pointerKind === 'touch' ? 220 : 380
+                const influence = Math.pow(clamp(1 - distance / reach, 0, 1), 1.5)
+                const restingRadius = (pointerKind === 'touch' ? 38 : 56) + Math.sin(index * 1.7) * 8
+                // A soft repulsive core creates breathing room without assigning ring slots.
+                const radialForce = clamp((distance - restingRadius) * (1.5 + settle * 8), -360, 430) * influence
+                const tangentForce = (10 + Math.sin(index * 2.3) * 13) * influence
+                const drag = Math.exp(-(1.2 + settle * 2.4) * elapsed)
+                petal.velocityX = (petal.velocityX + (unitX * radialForce - unitY * tangentForce) * elapsed) * drag
+                petal.velocityY = (petal.velocityY + (unitY * radialForce + unitX * tangentForce) * elapsed) * drag
+                // Local separation preserves distinct petals as the cloud gathers.
+                for (let otherIndex = index + 1; otherIndex < fallingPetals.length; otherIndex += 1) {
+                  const other = fallingPetals[otherIndex]
+                  const gapX = petal.x - other.x
+                  const gapY = petal.y - other.y
+                  const gap = Math.hypot(gapX, gapY)
+                  if (gap > 0 && gap < 17) {
+                    const pressure = (17 - gap) * 9 * elapsed / gap
+                    petal.velocityX += gapX * pressure
+                    petal.velocityY += gapY * pressure
+                    other.velocityX -= gapX * pressure
+                    other.velocityY -= gapY * pressure
+                  }
+                }
+              }
+              const speed = Math.hypot(petal.velocityX, petal.velocityY)
+              const maxSpeed = pointerIsActive ? 420 : 68
+              if (speed > maxSpeed) {
+                petal.velocityX = (petal.velocityX / speed) * maxSpeed
+                petal.velocityY = (petal.velocityY / speed) * maxSpeed
+              }
+              petal.x += petal.velocityX * elapsed
+              petal.y += petal.velocityY * elapsed
+              petal.rotation += petal.rotationSpeed * elapsed
+              petal.velocityX *= Math.pow(.997, elapsed * 24)
+              petal.velocityY *= Math.pow(.999, elapsed * 24)
+            }
+
+            const fade = petal.isStill ? 1 : Math.min(1, (PETAL_LIFETIME_SECONDS - petal.age) * 2)
+            const marginFade = fadeAtTextEdges(petal.x, petal.y, textExclusions, petal.size)
+            context.save()
+            context.translate(petal.x, petal.y)
+            context.rotate(petal.rotation)
+            context.globalAlpha = Math.max(0, fade * marginFade) * 0.84
+            context.fillStyle = palette.petals?.[petal.tone ?? 0] ?? palette.accent
+            context.strokeStyle = palette.muted
+            context.lineWidth = 0.55
+            context.beginPath()
+            context.moveTo(-petal.size * 0.55, 0)
+            context.bezierCurveTo(-petal.size * 0.2, -petal.size * 0.55, petal.size * 0.3, -petal.size * 0.6, petal.size * 0.55, 0)
+            context.bezierCurveTo(petal.size * 0.25, petal.size * 0.5, -petal.size * 0.2, petal.size * 0.55, -petal.size * 0.55, 0)
+            context.closePath()
+            context.fill()
+            context.globalAlpha = .6
+            context.stroke()
+            context.restore()
+          })
+        }
+
+        function getTextExclusions() {
+          const selectors = variant === 'search'
+            ? '.cluster-nav, .wordmark, .theme-toggle, .search-form, .result-shelf__heading, .result-card, .lookup-message'
+            : '.cluster-nav, .reader-tools, .lyric-reader__identity, .lyric-reader__lines, .reader-comments__header, .reader-comments__state, .reader-comments__item, .reader-comments__actions, .reader-state > :not(.ambient-canvas):not(.canopy-space)'
+          const surfaces = document.querySelectorAll<HTMLElement>(selectors)
+          const exclusions: DOMRect[] = []
+          surfaces.forEach((surface) => {
+            if (surface.closest('[hidden]')) return
+            const bounds = surface.getBoundingClientRect()
+            if (bounds.width === 0 || bounds.height === 0) return
+            const padding = surface.matches('.lyric-reader__lines') ? 20 : 10
+            exclusions.push(new DOMRect(bounds.left - padding, bounds.top - padding, bounds.width + padding * 2, bounds.height + padding * 2))
+          })
+          return exclusions
+        }
+
+        function fadeAtTextEdges(x: number, y: number, exclusions: DOMRect[], radius = 0) {
+          let opacity = 1
+          exclusions.forEach((bounds) => {
+            const outsideX = Math.max(bounds.left - x, 0, x - bounds.right)
+            const outsideY = Math.max(bounds.top - y, 0, y - bounds.bottom)
+            const distance = Math.max(0, Math.hypot(outsideX, outsideY) - radius)
+            if (distance === 0) opacity = 0
+            else if (distance < 28) opacity = Math.min(opacity, distance / 28)
+          })
+          return opacity
+        }
+      }, host)
+
+      const redraw = () => {
+        geometryDirty = true
+        paletteDirty = true
+        if (!sketch || document.hidden) return
+        if (!sketch.isLooping?.()) sketch.redraw()
       }
-
-      currentPointer.lerp(targetPointer, 1 - Math.exp(-13 * elapsed))
-      currentInteraction += (targetInteraction - currentInteraction) * (1 - Math.exp(-15 * elapsed))
-      colorTime = now / 1000
-      updateBlobTargets(now, false, elapsed)
-      syncUniforms()
-      render()
-
-      if (isVisible && !reducedMotion.matches) {
-        animationFrame = window.requestAnimationFrame(tick)
-      } else {
-        animationFrame = 0
+      const emitPointerPetals = () => {
+        const now = performance.now()
+        if (!pointerIsActive || now - lastEmission < EMISSION_INTERVAL_MS) return
+        lastEmission = now
+        for (let index = 0; index < 3; index += 1) {
+          if (fallingPetals.length >= MAX_PETALS) {
+            const distantPetal = fallingPetals.findIndex(petal => Math.hypot(petal.x - pointerX, petal.y - pointerY) > 280)
+            if (distantPetal < 0) break
+            fallingPetals.splice(distantPetal, 1)
+          }
+          pointerPhase += 2.39996
+          fallingPetals.push({ x: pointerX + Math.cos(pointerPhase) * 75, y: pointerY + Math.sin(pointerPhase) * 75,
+            velocityX: 0, velocityY: 0, rotation: pointerPhase, rotationSpeed: .35, size: 10 + index * 2, age: 0, tone: Math.floor(pointerPhase) % 10 })
+        }
       }
-    }
-
-    const requestRender = () => {
-      if (!isVisible) return
-      if (reducedMotion.matches) {
-        readExternalInput()
-        currentPointer.copy(targetPointer)
-        currentInteraction = targetInteraction
-        colorTime = 0
-        updateBlobTargets(performance.now(), true)
-        syncUniforms()
-        render()
-        return
+      const onPointerMove = (event: PointerEvent) => {
+        if (reducedMotion.matches) return
+        if (event.pointerType !== 'mouse' && event.pointerType !== 'touch' && event.pointerType !== 'pen') return
+        const eventTime = performance.now()
+        if (Math.hypot(event.clientX - pointerX, event.clientY - pointerY) > .5) lastPointerMove = eventTime
+        pointerKind = event.pointerType
+        pointerX = event.clientX
+        pointerY = event.clientY
+        pointerIsActive = event.pointerType === 'mouse' || event.buttons > 0
+        const inUpperRight = pointerX > window.innerWidth * 0.52 && pointerY > 70 && pointerY < window.innerHeight * 0.7
+        pointerBreeze = inUpperRight ? clamp((pointerX / window.innerWidth - 0.5) * 1.4, 0, 0.7) : 0
+        lastBreeze = performance.now()
+        emitPointerPetals()
+        sketch?.loop()
       }
-      if (!animationFrame) {
-        lastFrame = performance.now()
-        animationFrame = window.requestAnimationFrame(tick)
+      const onPointerDown = (event: PointerEvent) => {
+        if (reducedMotion.matches) return
+        pointerKind = event.pointerType
+        pointerX = event.clientX
+        pointerY = event.clientY
+        pointerIsActive = true
+        lastPointerMove = performance.now()
+        emitPointerPetals()
+        sketch?.loop()
       }
-    }
-    requestRenderRef.current = requestRender
-
-    const stop = () => {
-      if (animationFrame) window.cancelAnimationFrame(animationFrame)
-      animationFrame = 0
-    }
-
-    const normalizedEventPosition = (event: PointerEvent) => {
-      const rect = canvas.getBoundingClientRect()
-      return new THREE.Vector2(
-        clamp((event.clientX - rect.left) / Math.max(rect.width, 1), 0, 1),
-        1 - clamp((event.clientY - rect.top) / Math.max(rect.height, 1), 0, 1),
-      )
-    }
-
-    const setTouchContact = (event: PointerEvent) => {
-      const position = normalizedEventPosition(event)
-      activeTouch = true
-      lastTouch.copy(position)
-      targetPointer.copy(position)
-      targetInteraction = 1
-      decayStartedAt = null
-    }
-
-    const endTouchContact = (event: PointerEvent) => {
-      lastTouch.copy(normalizedEventPosition(event))
-      targetPointer.copy(lastTouch)
-      activeTouch = false
-      if (reducedMotion.matches) {
-        targetInteraction = 0
-      } else {
-        decayStartedAt = performance.now()
+      const onPointerUp = () => {
+        pointerIsActive = false
+        sketch?.loop()
       }
-    }
-
-    const onPointerDown = (event: PointerEvent) => {
-      if (inputRef.current) return
-      if (event.pointerType === 'mouse') {
-        mouseFine = true
-        targetPointer.copy(normalizedEventPosition(event))
-        targetInteraction = 0.62
-      } else {
-        setTouchContact(event)
+      const onPointerLeave = (event: PointerEvent) => {
+        if (event.pointerType === 'mouse') {
+          pointerIsActive = false
+          pointerBreeze = 0
+          lastBreeze = performance.now()
+          sketch?.loop()
+        }
       }
-      requestRender()
-    }
-
-    const onPointerMove = (event: PointerEvent) => {
-      if (inputRef.current) return
-      if (event.pointerType === 'mouse') {
-        mouseFine = true
-        targetPointer.copy(normalizedEventPosition(event))
-        targetInteraction = 0.62
-      } else if (activeTouch) {
-        setTouchContact(event)
+      const onVisibilityChange = () => {
+        if (document.hidden) {
+          if (petalTimer !== null) window.clearTimeout(petalTimer)
+          petalTimer = null
+          sketch?.noLoop()
+        } else redraw()
       }
-      requestRender()
-    }
-
-    const onPointerUp = (event: PointerEvent) => {
-      if (!inputRef.current && event.pointerType !== 'mouse') endTouchContact(event)
-      requestRender()
-    }
-
-    const onPointerCancel = (event: PointerEvent) => {
-      if (!inputRef.current && event.pointerType !== 'mouse') endTouchContact(event)
-      requestRender()
-    }
-
-    const onPointerLeave = (event: PointerEvent) => {
-      if (inputRef.current) return
-      if (event.pointerType === 'mouse') {
-        mouseFine = false
-        targetInteraction = 0
-      } else if (activeTouch) {
-        endTouchContact(event)
+      const onReducedMotionChange = () => {
+        lastBreeze = reducedMotion.matches ? 0 : performance.now()
+        fallingPetals = []
+        fallingLeaves = []
+        if (reducedMotion.matches) fallingPetals = createStillPetals(window.innerWidth, window.innerHeight)
+        else nextPetalAt = performance.now() + 900
+        sketch?.redraw()
       }
-      requestRender()
-    }
+      const onScroll = redraw
+      const themeObserver = new MutationObserver(redraw)
+      const layoutObserver = new ResizeObserver(redraw)
 
-    const onVisibilityChange = () => {
-      isVisible = !document.hidden
-      if (isVisible) requestRender()
-      else stop()
-    }
+      themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+      layoutObserver.observe(document.body)
+      window.addEventListener('pointermove', onPointerMove, { passive: true })
+      window.addEventListener('pointerdown', onPointerDown, { passive: true })
+      window.addEventListener('pointerup', onPointerUp, { passive: true })
+      window.addEventListener('pointercancel', onPointerUp, { passive: true })
+      window.addEventListener('pointerleave', onPointerLeave, { passive: true })
+      window.addEventListener('scroll', onScroll, { passive: true })
+      document.addEventListener('visibilitychange', onVisibilityChange)
+      reducedMotion.addEventListener('change', onReducedMotionChange)
 
-    const onReducedMotionChange = () => {
-      decayStartedAt = null
-      stop()
-      if (reducedMotion.matches && !activeTouch && !inputRef.current?.isActive) targetInteraction = 0
-      requestRender()
-    }
-
-    const onContextLost = (event: Event) => {
-      event.preventDefault()
-      stop()
-      reportFallback('context-lost')
-    }
-
-    const resizeObserver = new ResizeObserver(resize)
-    const themeObserver = new MutationObserver(() => requestRender())
-    resizeObserver.observe(canvas)
-    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
-    window.addEventListener('pointerdown', onPointerDown, { passive: true })
-    window.addEventListener('pointermove', onPointerMove, { passive: true })
-    window.addEventListener('pointerup', onPointerUp, { passive: true })
-    window.addEventListener('pointercancel', onPointerCancel, { passive: true })
-    window.addEventListener('pointerleave', onPointerLeave, { passive: true })
-    document.addEventListener('visibilitychange', onVisibilityChange)
-    canvas.addEventListener('webglcontextlost', onContextLost)
-    reducedMotion.addEventListener('change', onReducedMotionChange)
-
-    updateBlobTargets(performance.now(), true)
-    resize()
-    requestRender()
+      cleanupSketchEvents = () => {
+        themeObserver.disconnect()
+        layoutObserver.disconnect()
+        window.removeEventListener('pointermove', onPointerMove)
+        window.removeEventListener('pointerdown', onPointerDown)
+        window.removeEventListener('pointerup', onPointerUp)
+        window.removeEventListener('pointercancel', onPointerUp)
+        window.removeEventListener('pointerleave', onPointerLeave)
+        window.removeEventListener('scroll', onScroll)
+        document.removeEventListener('visibilitychange', onVisibilityChange)
+        reducedMotion.removeEventListener('change', onReducedMotionChange)
+      }
+    })
 
     return () => {
-      stop()
-      requestRenderRef.current = null
-      resizeObserver.disconnect()
-      themeObserver.disconnect()
-      window.removeEventListener('pointerdown', onPointerDown)
-      window.removeEventListener('pointermove', onPointerMove)
-      window.removeEventListener('pointerup', onPointerUp)
-      window.removeEventListener('pointercancel', onPointerCancel)
-      window.removeEventListener('pointerleave', onPointerLeave)
-      document.removeEventListener('visibilitychange', onVisibilityChange)
-      canvas.removeEventListener('webglcontextlost', onContextLost)
-      reducedMotion.removeEventListener('change', onReducedMotionChange)
-      field.geometry.dispose()
-      ;(field.material as THREE.Material).dispose()
-      renderer.dispose()
-      const rootStyle = document.documentElement.style
-      rootStyle.removeProperty('--lyrics-ripple-x')
-      rootStyle.removeProperty('--lyrics-ripple-y')
-      rootStyle.removeProperty('--lyrics-ripple-x-reverse')
-      rootStyle.removeProperty('--lyrics-ripple-y-reverse')
+      disposed = true
+      if (petalTimer !== null) window.clearTimeout(petalTimer)
+      cleanupSketchEvents()
+      sketch?.remove()
     }
-  }, [])
+  }, [variant])
 
-  return <canvas ref={canvasRef} className={className ?? 'ambient-canvas'} aria-hidden="true" />
+  return <div ref={hostRef} className={className ?? 'ambient-canvas'} aria-hidden="true" />
 }

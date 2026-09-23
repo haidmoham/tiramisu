@@ -4,6 +4,7 @@ import {
   TIRAMISU_DEFAULT_TRACKS,
   TiramisuLyricsProvider,
 } from './TiramisuLyricsProvider'
+import { createLrcMuxTrackSummary, LrcMuxRequestError } from './LrcMuxLyricsProvider'
 
 function stubProvider(overrides: Partial<LyricsProvider> = {}): LyricsProvider {
   return {
@@ -38,6 +39,7 @@ describe('TiramisuLyricsProvider', () => {
       { title: 'Melancholy', artist: 'Driveways' },
       { title: 'cbd', artist: 'brakence' },
     ])
+    expect(TIRAMISU_DEFAULT_TRACKS[0]).toMatchObject({ id: 'lrclib:9878071', source: 'lrclib' })
     expect(primary.search).not.toHaveBeenCalled()
     expect(fetch).not.toHaveBeenCalled()
   })
@@ -171,5 +173,41 @@ describe('TiramisuLyricsProvider', () => {
     expect(primary.getLyrics).toHaveBeenCalledWith('lrclib:42', undefined)
     expect(fallback.getLyrics).toHaveBeenCalledWith('lrcmux:encoded', undefined)
     await expect(provider.getLyrics('unknown:1')).rejects.toThrow('Unknown lyrics source')
+  })
+
+  it('recovers a stale LrcMux link through an exact LRCLIB match', async () => {
+    const savedTrack = createLrcMuxTrackSummary({
+      title: 'This Modern Love', artist: 'Bloc Party', album: 'Silent Alarm', duration: 266,
+    })
+    const primary = stubProvider({
+      search: vi.fn(async () => [
+        { id: 'lrclib:wrong', title: 'This Modern Love (Live)', artist: 'Bloc Party', collection: 'Live', source: 'lrclib' as const },
+        { id: 'lrclib:9878071', title: 'This Modern Love', artist: 'Bloc Party', collection: 'Bloc Party', source: 'lrclib' as const },
+      ]),
+      getLyrics: vi.fn(async (id) => inventedDocument(id)),
+    })
+    const fallback = stubProvider({ getLyrics: vi.fn(async () => { throw new LrcMuxRequestError(404) }) })
+    const provider = new TiramisuLyricsProvider({ primary, fallback, fetch: vi.fn() })
+
+    await expect(provider.getLyrics(savedTrack.id)).resolves.toMatchObject({ track: { id: 'lrclib:9878071' } })
+    expect(primary.search).toHaveBeenCalledWith('This Modern Love Bloc Party', undefined)
+    expect(primary.getLyrics).toHaveBeenCalledWith('lrclib:9878071', undefined)
+  })
+
+  it('does not substitute a different song or retry a provider outage', async () => {
+    const savedTrack = createLrcMuxTrackSummary({ title: 'This Modern Love', artist: 'Bloc Party' })
+    const primary = stubProvider({ search: vi.fn(async () => [
+      { id: 'lrclib:other', title: 'This Modern Love (Live)', artist: 'Bloc Party', collection: 'Live', source: 'lrclib' as const },
+    ]) })
+    const fallback = stubProvider({ getLyrics: vi.fn(async () => { throw new LrcMuxRequestError(404) }) })
+    const provider = new TiramisuLyricsProvider({ primary, fallback, fetch: vi.fn() })
+
+    await expect(provider.getLyrics(savedTrack.id)).rejects.toMatchObject({ status: 404 })
+    expect(primary.getLyrics).not.toHaveBeenCalled()
+
+    const outage = new LrcMuxRequestError(503)
+    fallback.getLyrics = vi.fn(async () => { throw outage })
+    await expect(provider.getLyrics(savedTrack.id)).rejects.toBe(outage)
+    expect(primary.search).toHaveBeenCalledTimes(1)
   })
 })

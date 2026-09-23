@@ -7,7 +7,9 @@ import type {
 import { LrcLibLyricsProvider } from './LrcLibLyricsProvider'
 import {
   createLrcMuxTrackSummary,
+  decodeLrcMuxTrackMetadata,
   LrcMuxLyricsProvider,
+  LrcMuxRequestError,
   type LrcMuxTrackMetadata,
 } from './LrcMuxLyricsProvider'
 
@@ -15,12 +17,13 @@ const SUGGEST_URL = 'https://api.lyrics.ovh/suggest/'
 const MAX_SUGGESTIONS = 12
 
 export const TIRAMISU_DEFAULT_TRACKS: readonly TrackSummary[] = [
-  createLrcMuxTrackSummary({
+  {
+    id: 'lrclib:9878071',
     title: 'This Modern Love',
     artist: 'Bloc Party',
-    album: 'Silent Alarm',
-    duration: 266,
-  }),
+    collection: 'Bloc Party',
+    source: 'lrclib',
+  },
   createLrcMuxTrackSummary({
     title: 'Melancholy',
     artist: 'Driveways',
@@ -97,7 +100,24 @@ export class TiramisuLyricsProvider implements LyricsProvider {
 
   async getLyrics(id: string, signal?: AbortSignal): Promise<LyricDocument> {
     if (id.startsWith('lrclib:')) return this.#primary.getLyrics(id, signal)
-    if (id.startsWith('lrcmux:')) return this.#fallback.getLyrics(id, signal)
+    if (id.startsWith('lrcmux:')) {
+      try {
+        return await this.#fallback.getLyrics(id, signal)
+      } catch (error) {
+        if (!(error instanceof LrcMuxRequestError) || error.status !== 404) throw error
+
+        // Old saved links can outlive a provider's catalog entry. Retry only an
+        // exact title-and-artist match so a different recording is not shown.
+        const metadata = decodeLrcMuxTrackMetadata(id)
+        const candidates = await this.#primary.search(`${metadata.title} ${metadata.artist}`, signal)
+        const matchingTrack = candidates.find((candidate) =>
+          candidate.title.trim().toLowerCase() === metadata.title.trim().toLowerCase()
+          && candidate.artist.trim().toLowerCase() === metadata.artist.trim().toLowerCase(),
+        )
+        if (!matchingTrack) throw error
+        return this.#primary.getLyrics(matchingTrack.id, signal)
+      }
+    }
     throw new Error('Unknown lyrics source in track ID.')
   }
 }

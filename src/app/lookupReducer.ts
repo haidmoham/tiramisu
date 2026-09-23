@@ -78,7 +78,6 @@ export function lookupReducer(state: LookupState, action: LookupAction): LookupS
       if (action.requestId !== state.lyricsRequestId) return state
       return {
         ...state,
-        selectedTrackId: action.document.track.id,
         document: action.document,
         lyricsStatus: 'ready',
       }

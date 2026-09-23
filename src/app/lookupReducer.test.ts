@@ -82,6 +82,22 @@ describe('lookupReducer', () => {
     })
   })
 
+  it('keeps the requested route ID when another provider resolves an old link', () => {
+    const loading = lookupReducer(initialLookupState, {
+      type: 'lyricsStarted', requestId: 4, id: 'lrcmux:old-link',
+    })
+    const ready = lookupReducer(loading, {
+      type: 'lyricsSucceeded', requestId: 4, document: {
+        ...document,
+        track: { ...track, id: 'lrclib:9878071', source: 'lrclib' },
+      },
+    })
+
+    expect(ready.selectedTrackId).toBe('lrcmux:old-link')
+    expect(ready.document?.track.id).toBe('lrclib:9878071')
+    expect(ready.lyricsStatus).toBe('ready')
+  })
+
   it('captures failures and resets the lookup state', () => {
     const failed = lookupReducer(
       lookupReducer(initialLookupState, { type: 'searchStarted', requestId: 1 }),

@@ -322,7 +322,10 @@ function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
     return () => commentsController.current?.abort()
   }, [trackId])
 
-  const document = state.document?.track.id === trackId ? state.document : null
+  // A stale saved link can resolve through another provider while the URL keeps
+  // its original ID. The selected request ID, not the returned source ID,
+  // determines whether the document belongs to this reader route.
+  const document = state.selectedTrackId === trackId ? state.document : null
 
   if (state.selectedTrackId === trackId && state.lyricsStatus === 'error') {
     return (

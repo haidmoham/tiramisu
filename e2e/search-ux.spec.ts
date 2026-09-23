@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
+import { createLrcMuxTrackSummary } from '../src/lookup/LrcMuxLyricsProvider'
 
 const QA_SEARCH_RESULT = {
   id: 101,
@@ -13,6 +14,16 @@ const QA_SEARCH_RESULT = {
 const QA_LRCLIB_DOCUMENT = {
   ...QA_SEARCH_RESULT,
   plainLyrics: 'Original QA line alpha.\nOriginal QA line beta.\nOriginal QA line gamma.',
+}
+
+const QA_MODERN_DOCUMENT = {
+  id: 9878071,
+  trackName: 'This Modern Love',
+  artistName: 'Bloc Party',
+  albumName: 'Bloc Party',
+  instrumental: false,
+  plainLyrics: 'Original QA line one.\nOriginal QA line two.\nOriginal QA line three.',
+  syncedLyrics: null,
 }
 
 const QA_FEAR_SZA_RESULT = {
@@ -83,6 +94,10 @@ async function installApiFixtures(page: Page): Promise<void> {
         ])
         return
       }
+      if (query === 'this modern love bloc party') {
+        await fulfillJson(route, [QA_MODERN_DOCUMENT])
+        return
+      }
       if (query === 'broken') {
         await fulfillJson(route, { error: 'intentional QA failure' }, 503)
         return
@@ -101,6 +116,11 @@ async function installApiFixtures(page: Page): Promise<void> {
       return
     }
 
+    if (url.pathname.endsWith('/get/9878071')) {
+      await fulfillJson(route, QA_MODERN_DOCUMENT)
+      return
+    }
+
     await route.continue()
   })
 
@@ -108,7 +128,7 @@ async function installApiFixtures(page: Page): Promise<void> {
     await fulfillJson(route, { data: [] })
   })
 
-  await page.route('https://api.lrcmux.dev/get', async (route) => {
+  await page.route('https://api.lrcmux.dev/get?**', async (route) => {
     await fulfillJson(route, QA_LRCMUX_DOCUMENT)
   })
 }
@@ -247,7 +267,7 @@ test.describe('search UX', () => {
       })
     }
 
-    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
 
     await expect.poll(() => page.evaluate(() => {
       const maxScroll = document.documentElement.scrollHeight - window.innerHeight
@@ -273,5 +293,25 @@ test.describe('search UX', () => {
     await expect(focusToggle).toHaveAttribute('aria-pressed', 'true')
     await expect(page.locator('.reader-view')).toHaveAttribute('data-focus', 'true')
     await expect(page.getByRole('tab', { name: 'Comments' })).toHaveCount(0)
+  })
+
+  test('opens the featured sheet and recovers an old saved LrcMux link', async ({ page }) => {
+    await openSearch(page)
+
+    await page.getByRole('button', { name: /This Modern Love/ }).click()
+    await expect(page).toHaveURL(/\/lyrics\/lrclib:9878071$/)
+    await expect(page.getByRole('heading', { name: 'This Modern Love' })).toBeVisible()
+    await expect(page.locator('.lyric-reader__line-ink-base').first()).toContainText('Original QA line one.')
+
+    const oldLink = createLrcMuxTrackSummary({
+      title: 'This Modern Love', artist: 'Bloc Party', album: 'Silent Alarm', duration: 266,
+    })
+    await page.route('https://api.lrcmux.dev/get?**', async (route) => {
+      await fulfillJson(route, { title: 'Not Found', status: 404, detail: 'no lyrics found' }, 404)
+    })
+    await page.goto(`/lyrics/${oldLink.id}`)
+    await expect(page.getByRole('heading', { name: 'This Modern Love' })).toBeVisible()
+    await expect(page.locator('.lyric-reader__line-ink-base').first()).toContainText('Original QA line one.')
+    await expect(page.getByText('That lyric sheet could not be found.')).toHaveCount(0)
   })
 })

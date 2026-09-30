@@ -289,3 +289,20 @@ describe('search request lifecycle', () => {
     timer.mockRestore()
   })
 })
+
+it('explains confirmed lyric absence for the exact recording and returns to its search', async () => {
+  const { createLrcMuxTrackSummary, LrcMuxRequestError } = await import('./lookup/LrcMuxLyricsProvider')
+  const user = userEvent.setup()
+  const track = createLrcMuxTrackSummary({title: 'Alice', artist: 'Cherry', album: 'Safe In Your Stare', duration: 241})
+  const provider = {
+    search: vi.fn(async () => [track]),
+    getLyrics: vi.fn(async () => {throw new LrcMuxRequestError(404)}),
+  }
+  render(<MemoryRouter initialEntries={['/?q=Alice+Cherry']}><App provider={provider} /></MemoryRouter>)
+  await user.click(await screen.findByRole('button', {name: /Alice.*Cherry/}))
+  expect(await screen.findByRole('heading', {name: 'no lyric sheet is available for this recording.'})).toBeVisible()
+  expect(screen.getByText('Alice — Cherry')).toBeVisible()
+  expect(screen.getByText(/current sources do not have readable lyrics/)).toBeVisible()
+  await user.click(screen.getByRole('button', {name: 'Back to search'}))
+  expect(await screen.findByRole('heading', {name: 'results for “Alice Cherry”'})).toBeVisible()
+})

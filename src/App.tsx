@@ -4,6 +4,8 @@ import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } fr
 import type { LyricsProvider, LyricsSearchField, TrackSummary } from './domain'
 import { initialLookupState, lookupReducer } from './app/lookupReducer'
 import { TiramisuLyricsProvider } from './lookup'
+import { LrcLibRequestError, LrcLibLyricsUnavailableError } from './lookup/LrcLibLyricsProvider'
+import { LrcMuxRequestError, LrcMuxLyricsUnavailableError } from './lookup/LrcMuxLyricsProvider'
 import { CommentsPanel } from './comments/CommentsPanel'
 import type { CommentsStatus, GeniusComment, GeniusCommentsResponse } from './comments/CommentsPanel'
 import type { AmbientCanvasProps } from './presentation/AmbientCanvas'
@@ -15,6 +17,8 @@ import { ThemeProvider } from './theme'
 import './styles/presentation.css'
 import './App.css'
 import './styles/bloom.css'
+
+const UNAVAILABLE_LYRICS_MESSAGE = 'the current sources do not have readable lyrics for this recording.'
 
 const defaultProvider = new TiramisuLyricsProvider()
 const AmbientCanvas = lazy(async () => {
@@ -401,7 +405,7 @@ function LyricsView({ provider, state, dispatch, returnUrl }: LyricsViewProps) {
       .then((document) => dispatch({ type: 'lyricsSucceeded', requestId, document }))
       .catch((error: unknown) => {
         if (isAbortError(error)) return
-        dispatch({ type: 'lyricsFailed', requestId, error: messageFrom(error) })
+        dispatch({ type: 'lyricsFailed', requestId, error: lyricsErrorMessage(error) })
       })
 
     return () => controller.abort()
@@ -421,12 +425,15 @@ function LyricsView({ provider, state, dispatch, returnUrl }: LyricsViewProps) {
   const document = state.selectedTrackId === trackId ? state.document : null
 
   if (state.selectedTrackId === trackId && state.lyricsStatus === 'error') {
+    const unavailable = state.lyricsError === UNAVAILABLE_LYRICS_MESSAGE
+    const track = state.results.find((candidate) => candidate.id === trackId)
     return (
       <main id="main-content" className="reader-state" tabIndex={-1}>
         <AmbientLayer variant="reader" />
         <div className="canopy-space canopy-space--reader" aria-hidden="true" />
-        <p className="eyebrow">The page is missing</p>
-        <h1>That lyric sheet could not be found.</h1>
+        <p className="eyebrow">{unavailable ? 'lyrics unavailable' : 'The page is missing'}</p>
+        <h1>{unavailable ? 'no lyric sheet is available for this recording.' : 'That lyric sheet could not be found.'}</h1>
+        {track ? <p>{track.title} — {track.artist}</p> : null}
         <p>{state.lyricsError}</p>
         <button type="button" onClick={() => navigate(returnUrl)}>
           Back to search
@@ -631,6 +638,14 @@ function mergeComments(existing: GeniusComment[], incoming: GeniusComment[]) {
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError'
+}
+
+function lyricsErrorMessage(error: unknown): string {
+  if (error instanceof LrcLibLyricsUnavailableError || error instanceof LrcMuxLyricsUnavailableError
+    || ((error instanceof LrcLibRequestError || error instanceof LrcMuxRequestError) && error.status === 404)) {
+    return UNAVAILABLE_LYRICS_MESSAGE
+  }
+  return messageFrom(error)
 }
 
 function messageFrom(error: unknown): string {

@@ -352,3 +352,31 @@ for (const width of [390, 1280]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   })
 }
+
+for (const width of [390, 1280]) {
+  test(`finds the exact Alice by Cherry recording and explains source absence at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({width, height: 844})
+    await openSearch(page)
+    await page.route('https://lrclib.net/api/search?**', route => fulfillJson(route, [{
+      id: 16065898, trackName: 'OKAGA, CA (feat. Alice Smith)', artistName: 'Tyler, The Creator, Alice Smith',
+      albumName: 'Cherry Bomb', plainLyrics: null, syncedLyrics: null, instrumental: false,
+    }]))
+    await page.route('https://api.lyrics.ovh/suggest/**', route => fulfillJson(route, {data: [
+      ...Array.from({length: 12}, (_, index) => ({title: `Alice ${index}`, artist: {name: `Other Artist ${index}`}})),
+      {id: 2924992271, title: 'Alice', artist: {name: 'Cherry'}, album: {title: 'Safe In Your Stare'}, duration: 241},
+    ]}))
+    const input = page.getByRole('searchbox')
+    await input.fill('Alice Cherry')
+    await input.press('Enter')
+    const first = page.locator('.result-card').first()
+    await expect(first).toHaveAccessibleName('Alice Cherry Safe In Your Stare')
+    await page.route('https://api.lrcmux.dev/get?**', route => fulfillJson(route, {title: 'Not Found', status: 404}, 404))
+    await first.click()
+    await expect(page.getByRole('heading', {name: 'no lyric sheet is available for this recording.'})).toBeVisible()
+    await expect(page.getByText('Alice — Cherry')).toBeVisible()
+    await page.getByRole('button', {name: 'Back to search'}).click()
+    await expect(input).toHaveValue('Alice Cherry')
+    await expect(first).toBeFocused()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  })
+}

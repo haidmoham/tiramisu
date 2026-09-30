@@ -95,3 +95,33 @@ Next: clone/fetch `codex/lyrics-sourcing`, run `npm ci`, rerun the unit suite
 with at most two workers, build/lint and the failed browser case, then publish
 a review preview after checks pass. Source coverage for Alice remains missing;
 new licensed-provider integration still needs verified terms/access.
+
+## Windows review verification - 2026-09-30
+
+The isolated Windows checkout verified the handoff SHA
+`811551d2464e9c292982dd6d69a9626e954a26be` and merged search base above.
+There is no tracked project `AGENTS.md` or `.agents` directory in this branch;
+installed global and local Poneglyph instructions were read.
+
+- `npm ci` completed from the committed lockfile. It reported one high-severity
+  dependency advisory; dependencies were not changed in this bounded slice.
+- Initial unit run passed 95/95 with two workers. The final run passed 96/96
+  after adding a regression for distinct albums/durations within metadata
+  suggestions. Exact metadata duplicates are still removed.
+- `npm run build`, `npm run lint`, and `git diff --check` passed. The build
+  reports existing large-chunk and dependency annotation warnings.
+- Final `npm run test:e2e -- --workers=1` passed 28/28, including native touch
+  scrolling and Alice/retry/attribution at 390px and 1280px. An intermediate run
+  passed 26/28: its outage fixture recovered on the first request, allowing
+  development-mode effect replay to consume the failure. The fixture now stays
+  unavailable until explicit retry and verifies one additional request. No
+  assertion was removed or timeout increased.
+- Failure states offer labelled Genius search and Spotify listening search
+  links. Neither link claims a verified lyric sheet or exact listening result.
+- No interactive in-app browser tool was exposed. Headless Chromium checks are
+  automated coverage; a real mobile device and previously opened mobile tab
+  remain untested. External provider coverage and lyric permissions remain as
+  documented above; mocked browser content is invented QA text.
+
+This slice remains for draft PR and preview review only. No merge, production
+cutover, custom alias change, provider account, or credential was authorized.

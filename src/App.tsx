@@ -471,6 +471,7 @@ function LyricsView({ provider, state, dispatch, returnUrl }: LyricsViewProps) {
             </button>
           ) : null}
           {track ? <a href={`https://genius.com/search?q=${encodeURIComponent(`${track.title} ${track.artist}`)}`} target="_blank" rel="noopener noreferrer">search Genius ↗</a> : null}
+          {track ? <a href={`https://open.spotify.com/search/${encodeURIComponent(`${track.title} ${track.artist}`)}`} target="_blank" rel="noopener noreferrer">find on Spotify ↗</a> : null}
           <button type="button" onClick={() => navigate(returnUrl)}>Back to search</button>
         </div>
       </main>

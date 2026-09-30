@@ -149,7 +149,10 @@ describe('TiramisuLyricsProvider', () => {
       expect.objectContaining({ href: 'https://example.test/suggest/invented%20song' }),
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
-    expect(results).toHaveLength(1)
+    expect(results).toHaveLength(2)
+    expect(results.map(({ collection, durationSeconds }) => [collection, durationSeconds])).toEqual([
+      ['Invented Collection', 210], ['Duplicate Collection', 211],
+    ])
     expect(results[0]).toMatchObject({
       id: expect.stringMatching(/^lrcmux:/),
       title: 'Invented Track',
@@ -296,4 +299,17 @@ it('keeps different albums in combined catalogs instead of treating them as the 
   const results=await new TiramisuLyricsProvider({primary,fetch}).search('Alice Cherry')
   expect(results).toHaveLength(2)
   expect(results.map(track=>track.collection)).toEqual(['Other Album','Safe In Your Stare'])
+})
+
+it('preserves distinct recordings within metadata suggestions and removes exact duplicates', async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [
+    { title: 'Invented Track', artist: { name: 'Invented Artist' }, album: { title: 'First Album' }, duration: 241 },
+    { title: 'Invented Track', artist: { name: 'Invented Artist' }, album: { title: 'Second Album' }, duration: 241 },
+    { title: 'Invented Track', artist: { name: 'Invented Artist' }, album: { title: 'First Album' }, duration: 260 },
+    { title: 'Invented Track', artist: { name: 'Invented Artist' }, album: { title: 'First Album' }, duration: 241 },
+  ] })))
+  const results = await new TiramisuLyricsProvider({ primary: stubProvider(), fetch }).search('Invented Track')
+  expect(results.map(({ collection, durationSeconds }) => [collection, durationSeconds])).toEqual([
+    ['First Album', 241], ['Second Album', 241], ['First Album', 260],
+  ])
 })

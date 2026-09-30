@@ -376,6 +376,7 @@ for (const width of [390, 1280]) {
     await expect(page.getByRole('heading', {name: 'we couldn’t find lyrics for this recording yet.'})).toBeVisible()
     await expect(page.getByText('Alice — Cherry')).toBeVisible()
     await expect(page.getByRole('link', {name: 'search Genius ↗'})).toHaveAttribute('href', 'https://genius.com/search?q=Alice%20Cherry')
+    await expect(page.getByRole('link', {name: 'find on Spotify ↗'})).toHaveAttribute('href', 'https://open.spotify.com/search/Alice%20Cherry')
     await expect(page.getByRole('button', {name: 'retry lyrics'})).toBeEnabled()
     await page.getByRole('button', {name: 'Back to search'}).click()
     await expect(input).toHaveValue('Alice Cherry')
@@ -389,17 +390,20 @@ for (const width of [390,1280]) {
     await page.setViewportSize({width,height:844})
     await openSearch(page)
     let requests=0
+    let recovered=false
     await page.route('https://lrclib.net/api/get/9878071',async route=> {
       requests++
-      await fulfillJson(route,requests===1?{}:QA_MODERN_DOCUMENT,requests===1?503:200)
+      await fulfillJson(route,recovered?QA_MODERN_DOCUMENT:{},recovered?200:503)
     })
     await page.getByRole('button',{name:/This Modern Love/}).click()
     await expect(page.getByRole('heading',{name:'the lyric source is temporarily unavailable.'})).toBeVisible()
     await expect(page.getByText(/this does not mean the lyrics are missing/)).toBeVisible()
+    const requestsBeforeRetry=requests
+    recovered=true
     await page.getByRole('button',{name:'retry lyrics'}).click()
     await expect(page.getByRole('link',{name:'LRCLIB ↗'})).toHaveAttribute('href','https://lrclib.net')
     await expect(page.locator('.lyric-reader__line-ink-base').first()).toContainText('Original QA line one.')
-    expect(requests).toBe(2)
+    expect(requests).toBe(requestsBeforeRetry+1)
     await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true)
   })
 }

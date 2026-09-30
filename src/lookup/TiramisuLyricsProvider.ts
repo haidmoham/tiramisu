@@ -13,7 +13,7 @@ import {
   type LrcMuxTrackMetadata,
 } from './LrcMuxLyricsProvider'
 
-import { sameRecording } from './recordingIdentity'
+import { normalizeIdentity, sameRecording } from './recordingIdentity'
 import { RecordingMismatchError } from './lyricsFailure'
 
 const SUGGEST_URL = 'https://api.lyrics.ovh/suggest/'
@@ -158,7 +158,10 @@ function parseSuggestions(payload: unknown): readonly TrackSummary[] {
     const metadata = parseSuggestion(candidate)
     if (!metadata) continue
 
-    const key = `${metadata.artist}\u0000${metadata.title}`.toLowerCase()
+    const key = JSON.stringify([
+      normalizeIdentity(metadata.artist), normalizeIdentity(metadata.title),
+      normalizeIdentity(metadata.album ?? ''), metadata.duration ?? null,
+    ])
     if (seen.has(key)) continue
     seen.add(key)
     results.push(createLrcMuxTrackSummary(metadata))

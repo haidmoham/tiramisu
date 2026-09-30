@@ -48,8 +48,8 @@ export interface TiramisuLyricsProviderOptions {
 /**
  * Tiramisu's provider composition.
  *
- * LRCLIB supplies stable-ID search and lyrics first. When it has no catalog
- * match, lyrics.ovh supplies metadata-only candidates and LrcMux retrieves the
+ * LRCLIB supplies stable-ID search and lyrics. lyrics.ovh adds metadata-only
+ * candidates even when LRCLIB returns broad matches, and LrcMux retrieves the
  * selected lyric document. Empty search intentionally returns the curated home
  * shelf without making a network request.
  */
@@ -82,20 +82,41 @@ export class TiramisuLyricsProvider implements LyricsProvider {
     const normalizedQuery = query.trim()
     if (!normalizedQuery) return TIRAMISU_DEFAULT_TRACKS
 
-    const primaryResults = await this.#primary.search(normalizedQuery, signal, field)
-    if (primaryResults.length > 0) return rankResults(primaryResults, normalizedQuery, field)
+    // Broad primary matches must not hide an exact recording in the other catalog.
+    // Bound metadata enrichment independently so its outage cannot stall useful lyrics.
+    const suggestSignal = AbortSignal.any([
+      ...(signal ? [signal] : []),
+      AbortSignal.timeout(5_000),
+    ])
+    const [primary, suggestions] = await Promise.allSettled([
+      this.#primary.search(normalizedQuery, signal, field),
+      this.#searchSuggestions(normalizedQuery, suggestSignal),
+    ])
+    if (signal?.aborted) throw new DOMException('Search was aborted.', 'AbortError')
 
-    const response = await this.#fetch(
-      new URL(`${this.#suggestUrl}${encodeURIComponent(normalizedQuery)}`),
-      { method: 'GET', headers: { Accept: 'application/json' }, signal },
-    )
-
-    if (!response.ok) {
-      throw new Error(`Catalog fallback failed (${response.status}).`)
+    const primaryResults = primary.status === 'fulfilled' ? primary.value : []
+    const suggestedResults = suggestions.status === 'fulfilled' ? suggestions.value : []
+    if (primaryResults.length === 0 && suggestedResults.length === 0) {
+      if (primary.status === 'rejected') throw primary.reason
+      if (suggestions.status === 'rejected') throw suggestions.reason
     }
 
+    const primaryIdentities = new Set(primaryResults.map(trackIdentity))
+    const additions = suggestedResults.filter((track) => !primaryIdentities.has(trackIdentity(track)))
+    return rankResults([...primaryResults, ...additions], normalizedQuery, field)
+      .slice(0, Math.max(primaryResults.length, MAX_SUGGESTIONS))
+  }
+
+  async #searchSuggestions(query: string, signal: AbortSignal): Promise<readonly TrackSummary[]> {
+    const response = await this.#fetch(
+      new URL(`${this.#suggestUrl}${encodeURIComponent(query)}`),
+      { method: 'GET', headers: { Accept: 'application/json' }, signal },
+    )
+    if (!response.ok) throw new Error(`Catalog fallback failed (${response.status}).`)
+    // Rank the entire response before applying the display limit. Alice by Cherry
+    // currently occurs after the first twelve metadata suggestions upstream.
     const payload: unknown = await response.json()
-    return rankResults(parseSuggestions(payload), normalizedQuery, field).slice(0, MAX_SUGGESTIONS)
+    return parseSuggestions(payload)
   }
 
   async getLyrics(id: string, signal?: AbortSignal): Promise<LyricDocument> {
@@ -158,9 +179,23 @@ function rankResults(
   if (terms.length === 0) return results
 
   return results
-    .map((track, index) => ({ track, index, score: relevanceScore(track, terms, field) }))
+    .map((track, index) => ({ track, index, score: relevanceScore(track, terms, field)
+      + exactIdentityScore(track, terms) }))
     .sort((left, right) => right.score - left.score || left.index - right.index)
     .map(({ track }) => track)
+}
+
+function trackIdentity(track: TrackSummary): string {
+  return `${searchTerms(track.title).join(' ')}\u0000${searchTerms(track.artist).join(' ')}`
+}
+
+function exactIdentityScore(track: TrackSummary, terms: readonly string[]): number {
+  const query = terms.join(' ')
+  const title = searchTerms(track.title).join(' ')
+  const artist = searchTerms(track.artist).join(' ')
+  // Repeated query terms across title, artist and album must not outrank the
+  // exact title-and-artist pair merely by accumulating lexical points.
+  return query === `${title} ${artist}` || query === `${artist} ${title}` ? 1_000 : 0
 }
 
 function relevanceScore(
@@ -228,6 +263,7 @@ function searchTerms(value: string): string[] {
   return value
     .toLocaleLowerCase()
     .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim()
     .split(/\s+/)

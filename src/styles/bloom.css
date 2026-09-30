@@ -289,3 +289,13 @@ html[data-theme='dark'] { --petal-lilac: #c1a9e2; --petal-rose: #d4a3ba; --petal
 @media (max-width: 700px) {
  .lyric-reader::before { top: 3.8rem; height: calc(100svh - 3.8rem); margin-bottom: calc(-100svh + 3.8rem); }
 }
+
+/* Search feedback stays readable without competing with the lyric shelf. */
+.search-form__help { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-top: .85rem; }
+.search-form__help p, .search-feedback { color: var(--ink-soft); font: 500 .8rem/1.5 var(--font-ui); }
+.search-form__help p { margin: 0; }
+.search-form__help button { flex-shrink: 0; margin: 0; min-height: 2.75rem; padding: .5rem .75rem; color: var(--ink); background: transparent; border: 1px solid var(--line-strong); }
+.result-shelf__heading h2 { overflow-wrap: anywhere; }
+.result-list[hidden] { display: none; }
+.result-card__identity .result-card__collection { color: var(--ink-faint); font-size: .7rem; }
+.lookup-message button { min-height: 2.75rem; margin-top: .75rem; }

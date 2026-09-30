@@ -44,7 +44,7 @@ describe('TiramisuLyricsProvider', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it('uses LRCLIB results without calling the metadata fallback', async () => {
+  it('preserves useful LRCLIB results when metadata enrichment fails', async () => {
     const result: TrackSummary = {
       id: 'lrclib:9',
       title: 'Invented Track',
@@ -57,7 +57,7 @@ describe('TiramisuLyricsProvider', () => {
     const provider = new TiramisuLyricsProvider({ primary, fallback: stubProvider(), fetch })
 
     await expect(provider.search('invented')).resolves.toEqual([result])
-    expect(fetch).not.toHaveBeenCalled()
+    expect(fetch).toHaveBeenCalledOnce()
   })
 
   it('promotes the artist match when a title-and-artist query is poorly ordered upstream', async () => {
@@ -147,7 +147,7 @@ describe('TiramisuLyricsProvider', () => {
 
     expect(fetch).toHaveBeenCalledWith(
       expect.objectContaining({ href: 'https://example.test/suggest/invented%20song' }),
-      expect.objectContaining({ signal: undefined }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
     expect(results).toHaveLength(1)
     expect(results[0]).toMatchObject({
@@ -210,4 +210,59 @@ describe('TiramisuLyricsProvider', () => {
     await expect(provider.getLyrics(savedTrack.id)).rejects.toBe(outage)
     expect(primary.search).toHaveBeenCalledTimes(1)
   })
+})
+
+it('keeps accented artist names together when ranking unaccented queries', async () => {
+  const primary = stubProvider({ search: vi.fn(async () => [
+    { id: 'lrclib:1', title: 'Bjork', artist: 'Other Artist', collection: 'Other', source: 'lrclib' as const },
+    { id: 'lrclib:2', title: 'Joga', artist: 'Björk', collection: 'Homogenic', source: 'lrclib' as const },
+  ]) })
+  const provider = new TiramisuLyricsProvider({ primary, fetch: vi.fn() })
+  expect((await provider.search('bjork')).map(({ id }) => id)).toEqual(['lrclib:2', 'lrclib:1'])
+})
+
+it('finds Alice by Cherry beyond twelve suggestions despite nonempty unrelated primary matches', async () => {
+  const primary = stubProvider({ search: vi.fn(async () => [{
+    id: 'lrclib:16065898', title: 'OKAGA, CA (feat. Alice Smith)',
+    artist: 'Tyler, The Creator, Alice Smith', collection: 'Cherry Bomb', source: 'lrclib' as const,
+  }]) })
+  const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => new Response(JSON.stringify({data: [
+    ...Array.from({length: 12}, (_, index) => ({title: `Alice ${index}`, artist: {name: `Other Artist ${index}`}})),
+    {id: 2924992271, title: 'Alice', artist: {name: 'Cherry'}, album: {title: 'Safe In Your Stare'}, duration: 241},
+  ]})))
+  const provider = new TiramisuLyricsProvider({primary, fetch})
+  for (const query of ['Alice Cherry', 'Cherry Alice']) {
+    const tracks = await provider.search(query)
+    expect(tracks[0]).toMatchObject({title: 'Alice', artist: 'Cherry', collection: 'Safe In Your Stare', source: 'lrcmux'})
+    expect(tracks.some(({id}) => id === 'lrclib:16065898')).toBe(true)
+    expect(tracks).toHaveLength(12)
+  }
+})
+
+it('uses metadata search when the primary catalog is unavailable', async () => {
+  const primary = stubProvider({search: vi.fn(async () => {throw new Error('primary unavailable')})})
+  const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(JSON.stringify({data: [
+    {title: 'Alice', artist: {name: 'Cherry'}, album: {title: 'Safe In Your Stare'}, duration: 241},
+  ]})))
+  const provider = new TiramisuLyricsProvider({primary, fetch})
+  expect((await provider.search('Alice Cherry'))[0]).toMatchObject({title: 'Alice', artist: 'Cherry'})
+})
+
+it('keeps the stable primary lyric ID when both catalogs identify the same recording', async () => {
+  const primary = stubProvider({search: vi.fn(async () => [{
+    id: 'lrclib:42', title: 'Alice', artist: 'Cherry', collection: 'Safe In Your Stare', source: 'lrclib' as const,
+  }])})
+  const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(JSON.stringify({data: [
+    {title: 'Alice', artist: {name: 'Cherry'}, album: {title: 'Safe In Your Stare'}, duration: 241},
+  ]})))
+  const provider = new TiramisuLyricsProvider({primary, fetch})
+  expect(await provider.search('Alice Cherry')).toEqual([expect.objectContaining({id: 'lrclib:42'})])
+})
+
+it('reports catalog failure rather than an empty match when both lookups fail', async () => {
+  const provider = new TiramisuLyricsProvider({
+    primary: stubProvider({search: vi.fn(async () => {throw new Error('primary unavailable')})}),
+    fetch: vi.fn().mockRejectedValue(new Error('metadata unavailable')),
+  })
+  await expect(provider.search('Alice Cherry')).rejects.toThrow('primary unavailable')
 })

@@ -28,7 +28,7 @@ function payload(overrides: Record<string, unknown> = {}) {
   return {
     track: {
       title: 'Invented Track',
-      artist: 'Invented Artist',
+      artist: 'Invented Artist', album: 'Invented Collection', duration: 204,
     },
     meta: {
       source: {
@@ -58,6 +58,7 @@ describe('LrcMuxLyricsProvider', () => {
       artist: 'Invented Artist',
       collection: 'Invented Collection',
       source: 'lrcmux',
+      durationSeconds: 203.5, lyricsAvailability: 'unknown',
     })
     expect(decodeLrcMuxTrackMetadata(summary.id)).toEqual({
       artist: 'Invented Artist',
@@ -87,7 +88,8 @@ describe('LrcMuxLyricsProvider', () => {
     })
 
     await expect(provider.getLyrics(summary.id)).resolves.toEqual({
-      track: summary,
+      track: {...summary, lyricsAvailability: 'available'},
+      attribution: {name: 'Invented Source', url: 'https://example.test/invented-source', via: 'LrcMux'},
       lines: [
         { id: '1', text: 'Invented first line' },
         { id: '2', text: 'Invented second line' },
@@ -95,7 +97,7 @@ describe('LrcMuxLyricsProvider', () => {
     })
     expect(fetch).toHaveBeenCalledWith(
       expect.objectContaining({
-        href: 'https://api.lrcmux.dev/get?artist=Invented+Artist&title=Invented+Track&album=Invented+Collection&duration=203.5&format=json&level=none',
+        href: 'https://api.lrcmux.dev/get?artist=Invented+Artist&title=Invented+Track&album=Invented+Collection&duration=204&format=json&level=none',
       }),
       expect.objectContaining({ method: 'GET', signal: undefined }),
     )
@@ -175,4 +177,36 @@ describe('LrcMuxLyricsProvider', () => {
       name: 'AbortError',
     })
   })
+})
+
+it.each([
+  {title: 'Invented Track (Live)', artist: 'Invented Artist', album: 'Invented Collection', duration: 204},
+  {title: 'Invented Track', artist: 'Other Artist', album: 'Invented Collection', duration: 204},
+  {title: 'Invented Track', artist: 'Invented Artist', album: 'Other Collection', duration: 204},
+  {title: 'Invented Track', artist: 'Invented Artist', album: 'Invented Collection', duration: 214},
+])('rejects lyrics for a different recording: %j', async (track) => {
+  const provider = new LrcMuxLyricsProvider({fetch: vi.fn().mockResolvedValue(response(payload({track})))})
+  const id = createLrcMuxTrackSummary({title: 'Invented Track', artist: 'Invented Artist', album: 'Invented Collection', duration: 204}).id
+  await expect(provider.getLyrics(id)).rejects.toMatchObject({name: 'RecordingMismatchError'})
+})
+
+it('retains attribution but does not expose unsafe source URLs', async () => {
+  const provider = new LrcMuxLyricsProvider({fetch: vi.fn().mockResolvedValue(response(payload({meta: {source: {name: 'Source', url: 'javascript:alert(1)'}}})))})
+  const id = createLrcMuxTrackSummary({title: 'Invented Track', artist: 'Invented Artist'}).id
+  expect((await provider.getLyrics(id)).attribution).toEqual({name:'Source', url:undefined, via:'LrcMux'})
+})
+
+it('honors Retry-After locally and retries only after the cooldown expires', async () => {
+  vi.useFakeTimers()
+  try {
+    const fetch = vi.fn().mockResolvedValueOnce(response({},429,{'Retry-After':'12'})).mockResolvedValueOnce(response(payload()))
+    const provider = new LrcMuxLyricsProvider({fetch})
+    const id = createLrcMuxTrackSummary({title:'Invented Track',artist:'Invented Artist'}).id
+    await expect(provider.getLyrics(id)).rejects.toMatchObject({status:429,retryAfter:'12'})
+    await expect(provider.getLyrics(id)).rejects.toMatchObject({status:429})
+    expect(fetch).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(12001)
+    await expect(provider.getLyrics(id)).resolves.toMatchObject({attribution:{name:'Invented Source'}})
+    expect(fetch).toHaveBeenCalledTimes(2)
+  } finally { vi.useRealTimers() }
 })

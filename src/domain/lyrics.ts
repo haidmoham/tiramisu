@@ -5,6 +5,9 @@ export interface TrackSummary {
   artist: string
   collection: string
   source: LyricsSource
+  durationSeconds?: number
+  /** Catalog metadata is separate from whether readable lyrics are known. */
+  lyricsAvailability?: 'unknown' | 'available' | 'missing' | 'instrumental'
 }
 
 /** The origin of lyric text. More provider kinds can be added without changing consumers. */
@@ -23,6 +26,7 @@ export interface LyricLine {
 export interface LyricDocument {
   track: TrackSummary
   lines: readonly LyricLine[]
+  attribution?: { name: string; url?: string; via?: string }
 }
 
 /** The lookup boundary used by the application, independent of any lyric service. */

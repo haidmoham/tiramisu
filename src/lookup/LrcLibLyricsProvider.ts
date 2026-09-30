@@ -5,6 +5,8 @@ import type {
   TrackSummary,
 } from '../domain'
 
+import { retryAfterTime } from './lyricsFailure'
+
 const DEFAULT_BASE_URL = 'https://lrclib.net/api/'
 const LRCLIB_ID_PREFIX = 'lrclib:'
 const LRCLIB_CLIENT = 'tiramisu/0.1 (https://github.com/haidmoham/tiramisu)'
@@ -24,12 +26,14 @@ export interface LrcLibLyricsProviderOptions {
 /** A non-2xx response from LRCLIB. */
 export class LrcLibRequestError extends Error {
   readonly status: number
+  readonly retryAfter: string | null
 
-  constructor(status: number, statusText = '') {
+  constructor(status: number, statusText = '', retryAfter: string | null = null) {
     const suffix = statusText.trim() ? ` ${statusText.trim()}` : ''
     super(`LRCLIB request failed (${status}${suffix}).`)
     this.name = 'LrcLibRequestError'
     this.status = status
+    this.retryAfter = retryAfter
   }
 }
 
@@ -43,14 +47,18 @@ export class LrcLibPayloadError extends Error {
 
 /** A valid LRCLIB track that has no readable lyric lines. */
 export class LrcLibLyricsUnavailableError extends Error {
-  constructor(message: string) {
+  readonly reason: 'not-found' | 'instrumental'
+
+  constructor(message: string, reason: 'not-found' | 'instrumental' = 'not-found') {
     super(message)
+    this.reason = reason
     this.name = 'LrcLibLyricsUnavailableError'
   }
 }
 
 interface LrcLibResult {
   id: string
+  durationSeconds?: number
   trackName: string
   artistName: string
   albumName: string | null
@@ -70,6 +78,7 @@ export class LrcLibLyricsProvider implements LyricsProvider {
   readonly #fetch: typeof fetch
   readonly #baseUrl: string
   readonly #maxResults: number
+  #retryAt = 0
 
   constructor({
     fetch: fetchImplementation,
@@ -127,7 +136,7 @@ export class LrcLibLyricsProvider implements LyricsProvider {
 
     if (result.instrumental) {
       throw new LrcLibLyricsUnavailableError(
-        `"${result.trackName}" is instrumental and has no lyrics.`,
+        `"${result.trackName}" is instrumental and has no lyrics.`, 'instrumental',
       )
     }
 
@@ -141,6 +150,7 @@ export class LrcLibLyricsProvider implements LyricsProvider {
 
     return {
       track: toTrackSummary(result),
+      attribution: { name: 'LRCLIB', url: 'https://lrclib.net' },
       lines: normalizedLines.map((text, index) => ({ id: String(index + 1), text })),
     }
   }
@@ -151,6 +161,9 @@ export class LrcLibLyricsProvider implements LyricsProvider {
 
   async #requestJson(url: URL, signal?: AbortSignal): Promise<unknown> {
     throwIfAborted(signal)
+    if (this.#retryAt > Date.now()) {
+      throw new LrcLibRequestError(429, '', String(Math.ceil((this.#retryAt - Date.now()) / 1000)))
+    }
     const response = await this.#fetch(url, {
       method: 'GET',
       headers: {
@@ -162,7 +175,9 @@ export class LrcLibLyricsProvider implements LyricsProvider {
     throwIfAborted(signal)
 
     if (!response.ok) {
-      throw new LrcLibRequestError(response.status, response.statusText ?? '')
+      const retryAfter = response.status === 429 ? response.headers?.get('Retry-After') ?? null : null
+      this.#retryAt = retryAfterTime(retryAfter) ?? 0
+      throw new LrcLibRequestError(response.status, response.statusText ?? '', retryAfter)
     }
 
     try {
@@ -181,6 +196,9 @@ function toTrackSummary(result: LrcLibResult): TrackSummary {
     artist: result.artistName,
     collection: result.albumName?.trim() || 'Unknown album',
     source: 'lrclib',
+    durationSeconds: result.durationSeconds,
+    lyricsAvailability: result.instrumental ? 'instrumental'
+      : result.plainLyrics?.trim() || result.syncedLyrics?.trim() ? 'available' : 'missing',
   }
 }
 
@@ -205,7 +223,9 @@ function parseResult(value: unknown, location: string): LrcLibResult {
   const plainLyrics = parseNullableString(value.plainLyrics, `${location}.plainLyrics`)
   const syncedLyrics = parseNullableString(value.syncedLyrics, `${location}.syncedLyrics`)
 
-  return { id, trackName, artistName, albumName, instrumental, plainLyrics, syncedLyrics }
+  const durationSeconds = typeof value.duration === 'number' && Number.isFinite(value.duration) && value.duration > 0
+    ? value.duration : undefined
+  return { id, durationSeconds, trackName, artistName, albumName, instrumental, plainLyrics, syncedLyrics }
 }
 
 function parseId(value: unknown, location: string): string {

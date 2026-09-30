@@ -178,3 +178,9 @@ describe('LrcLibLyricsProvider', () => {
     })
   })
 })
+
+it('retains duration, lyric status and source attribution independently of search identity', async () => {
+  const fetch=vi.fn().mockImplementation(async()=>response(result(301,{duration:241,plainLyrics:'Invented lyric line'})))
+  const provider=new LrcLibLyricsProvider({fetch})
+  expect((await provider.getLyrics('lrclib:301'))).toMatchObject({track:{durationSeconds:241,lyricsAvailability:'available'},attribution:{name:'LRCLIB',url:'https://lrclib.net'}})
+})

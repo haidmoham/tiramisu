@@ -5,6 +5,9 @@ import type {
   TrackSummary,
 } from '../domain'
 
+import { sameRecording, sourceUrl } from './recordingIdentity'
+import { RecordingMismatchError, retryAfterTime } from './lyricsFailure'
+
 export const DEFAULT_LRCMUX_BASE_URL = 'https://api.lrcmux.dev/get'
 export const LRCMUX_SOURCE = 'lrcmux'
 const LRCMUX_ID_PREFIX = 'lrcmux:'
@@ -50,16 +53,21 @@ export class LrcMuxPayloadError extends Error {
 
 /** A valid LrcMux result with no readable lyric lines. */
 export class LrcMuxLyricsUnavailableError extends Error {
-  constructor(message: string) {
+  readonly reason: 'not-found' | 'instrumental'
+
+  constructor(message: string, reason: 'not-found' | 'instrumental' = 'not-found') {
     super(message)
+    this.reason = reason
     this.name = 'LrcMuxLyricsUnavailableError'
   }
 }
 
 interface LrcMuxPayload {
   track: {
+    title: string; artist: string; collection?: string; durationSeconds?: number
     instrumental: boolean
   }
+  attribution: {name: string; url?: string; via?: string}
   lines: Array<{ text: string }>
 }
 
@@ -77,6 +85,8 @@ export function createLrcMuxTrackSummary(metadata: LrcMuxTrackMetadata): TrackSu
     artist: normalized.artist,
     collection: normalized.album ?? 'Unknown album',
     source: LRCMUX_SOURCE,
+    durationSeconds: normalized.duration,
+    lyricsAvailability: 'unknown',
   }
 }
 
@@ -125,6 +135,7 @@ export function decodeLrcMuxTrackSummary(id: string): TrackSummary {
 export class LrcMuxLyricsProvider implements LyricsProvider {
   readonly #fetch: typeof fetch
   readonly #baseUrl: string
+  #retryAt = 0
 
   constructor({
     fetch: fetchImplementation,
@@ -157,9 +168,11 @@ export class LrcMuxLyricsProvider implements LyricsProvider {
     const metadata = decodeLrcMuxTrackMetadata(id)
     const payload = parsePayload(await this.#requestJson(this.#url(metadata), signal))
 
+    if (!sameRecording(createLrcMuxTrackSummary(metadata), payload.track)) throw new RecordingMismatchError()
+
     if (payload.track.instrumental) {
       throw new LrcMuxLyricsUnavailableError(
-        `"${metadata.title}" is instrumental and has no lyrics.`,
+        `"${metadata.title}" is instrumental and has no lyrics.`, 'instrumental',
       )
     }
 
@@ -171,7 +184,8 @@ export class LrcMuxLyricsProvider implements LyricsProvider {
     }
 
     return {
-      track: createLrcMuxTrackSummary(metadata),
+      track: {...createLrcMuxTrackSummary(metadata), lyricsAvailability: 'available'},
+      attribution: payload.attribution,
       lines: lines.map((text, index) => ({ id: String(index + 1), text })),
     }
   }
@@ -181,7 +195,7 @@ export class LrcMuxLyricsProvider implements LyricsProvider {
     url.searchParams.set('artist', metadata.artist)
     url.searchParams.set('title', metadata.title)
     if (metadata.album) url.searchParams.set('album', metadata.album)
-    if (metadata.duration !== undefined) url.searchParams.set('duration', String(metadata.duration))
+    if (metadata.duration !== undefined) url.searchParams.set('duration', String(Math.round(metadata.duration)))
     url.searchParams.set('format', 'json')
     url.searchParams.set('level', 'none')
     return url
@@ -189,6 +203,9 @@ export class LrcMuxLyricsProvider implements LyricsProvider {
 
   async #requestJson(url: URL, signal?: AbortSignal): Promise<unknown> {
     throwIfAborted(signal)
+    if (this.#retryAt > Date.now()) {
+      throw new LrcMuxRequestError(429, '', String(Math.ceil((this.#retryAt - Date.now()) / 1000)))
+    }
     const response = await this.#fetch(url, {
       method: 'GET',
       headers: { Accept: 'application/json' },
@@ -197,10 +214,12 @@ export class LrcMuxLyricsProvider implements LyricsProvider {
     throwIfAborted(signal)
 
     if (!response.ok) {
+      const retryAfter = response.status === 429 ? response.headers.get('Retry-After') : null
+      this.#retryAt = retryAfterTime(retryAfter) ?? 0
       throw new LrcMuxRequestError(
         response.status,
         response.statusText ?? '',
-        response.status === 429 ? response.headers.get('Retry-After') : null,
+        retryAfter,
       )
     }
 
@@ -219,6 +238,8 @@ function parsePayload(value: unknown): LrcMuxPayload {
   }
 
   const track = parseRecord(value.track, 'track')
+  const meta = isRecord(value.meta) ? value.meta : {}
+  const source = isRecord(meta.source) ? meta.source : {}
   const lines = value.lines
   if (!Array.isArray(lines)) {
     throw new LrcMuxPayloadError('lines must be an array.')
@@ -226,8 +247,15 @@ function parsePayload(value: unknown): LrcMuxPayload {
 
   return {
     track: {
+      title: parseRequiredString(track.title, 'track.title'),
+      artist: parseRequiredString(track.artist, 'track.artist'),
+      collection: parseOptionalString(track.album, 'track.album'),
+      durationSeconds: parseOptionalDuration(track.duration, 'track.duration'),
       instrumental: parseOptionalBoolean(track.instrumental, 'track.instrumental') ?? false,
     },
+    attribution: typeof source.name === 'string' && source.name.trim()
+      ? {name: source.name.trim(), url: sourceUrl(source.url), via: 'LrcMux'}
+      : {name: 'LrcMux', url: 'https://lrcmux.dev'},
     lines: lines.map((line, index) => {
       const parsed = parseRecord(line, `lines[${index}]`)
       return { text: parseString(parsed.text, `lines[${index}].text`) }

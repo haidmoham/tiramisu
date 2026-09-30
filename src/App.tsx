@@ -4,8 +4,8 @@ import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } fr
 import type { LyricsProvider, LyricsSearchField, TrackSummary } from './domain'
 import { initialLookupState, lookupReducer } from './app/lookupReducer'
 import { TiramisuLyricsProvider } from './lookup'
-import { LrcLibRequestError, LrcLibLyricsUnavailableError } from './lookup/LrcLibLyricsProvider'
-import { LrcMuxRequestError, LrcMuxLyricsUnavailableError } from './lookup/LrcMuxLyricsProvider'
+import { decodeLrcMuxTrackSummary } from './lookup/LrcMuxLyricsProvider'
+import { classifyLyricsFailure } from './lookup/lyricsFailure'
 import { CommentsPanel } from './comments/CommentsPanel'
 import type { CommentsStatus, GeniusComment, GeniusCommentsResponse } from './comments/CommentsPanel'
 import type { AmbientCanvasProps } from './presentation/AmbientCanvas'
@@ -18,7 +18,13 @@ import './styles/presentation.css'
 import './App.css'
 import './styles/bloom.css'
 
-const UNAVAILABLE_LYRICS_MESSAGE = 'the current sources do not have readable lyrics for this recording.'
+const LYRICS_FAILURE_COPY = {
+  'not-found': ['lyrics not found', 'we couldn’t find lyrics for this recording yet.', 'the current sources returned no readable lyric sheet. you can retry later or search Genius.'],
+  instrumental: ['instrumental', 'this recording has no sung lyrics.', 'the source identifies this recording as instrumental.'],
+  restricted: ['source restricted', 'the source does not allow this request.', 'lyrics access is restricted. you can open an external search for this song.'],
+  ambiguous: ['recording unconfirmed', 'the source could not confirm this recording.', 'its title, artist, album, or duration did not uniquely match the selected recording.'],
+  'provider-unavailable': ['source unavailable', 'the lyric source is temporarily unavailable.', 'please retry after the source recovers. this does not mean the lyrics are missing.'],
+} as const
 
 const defaultProvider = new TiramisuLyricsProvider()
 const AmbientCanvas = lazy(async () => {
@@ -329,6 +335,7 @@ function SearchView({
                     <strong>{track.title}</strong>
                     <span>{track.artist}</span>
                     {track.collection && track.collection !== 'Unknown album' ? <span className="result-card__collection">{track.collection}</span> : null}
+                    {track.lyricsAvailability === 'unknown' ? <span className="result-card__collection">lyrics not confirmed</span> : null}
                   </span>
                   <span className="result-card__toy">
                     <ResultSymbolToy seed={`${track.id}-${index}`} />
@@ -385,6 +392,8 @@ function LyricsView({ provider, state, dispatch, returnUrl }: LyricsViewProps) {
   }, [trackId])
   const navigate = useNavigate()
   const lyricsRequestId = useRef(0)
+  const [lyricsAttempt, setLyricsAttempt] = useState(0)
+  const [now, setNow] = useState(Date.now)
   const [focusMode, setFocusMode] = useState(false)
   const [trackComments, setTrackComments] = useState<TrackCommentsState>(initialTrackCommentsState)
   const commentsController = useRef<AbortController | null>(null)
@@ -399,17 +408,32 @@ function LyricsView({ provider, state, dispatch, returnUrl }: LyricsViewProps) {
     const controller = new AbortController()
     const requestId = ++lyricsRequestId.current
     dispatch({ type: 'lyricsStarted', requestId, id: trackId })
+    const timeout = setTimeout(() => {
+      dispatch({type: 'lyricsFailed', requestId, error: 'The lyric request took too long.', failure: {kind: 'provider-unavailable'}})
+      controller.abort()
+    }, 20_000)
 
     void provider
       .getLyrics(trackId, controller.signal)
-      .then((document) => dispatch({ type: 'lyricsSucceeded', requestId, document }))
+      .then((document) => {
+        if (!controller.signal.aborted) dispatch({ type: 'lyricsSucceeded', requestId, document })
+      })
       .catch((error: unknown) => {
-        if (isAbortError(error)) return
-        dispatch({ type: 'lyricsFailed', requestId, error: lyricsErrorMessage(error) })
+        if (controller.signal.aborted || isAbortError(error)) return
+        setNow(Date.now())
+        dispatch({ type: 'lyricsFailed', requestId, error: messageFrom(error), failure: classifyLyricsFailure(error) })
       })
 
-    return () => controller.abort()
-  }, [dispatch, provider, trackId])
+      .finally(() => clearTimeout(timeout))
+
+    return () => { clearTimeout(timeout); controller.abort() }
+  }, [dispatch, provider, trackId, lyricsAttempt])
+
+  useEffect(() => {
+    if (!state.lyricsFailure?.retryAt) return undefined
+    const timer = setInterval(() => setNow(Date.now()), 500)
+    return () => clearInterval(timer)
+  }, [state.lyricsFailure?.retryAt])
 
   useEffect(() => {
     commentsController.current?.abort()
@@ -425,19 +449,31 @@ function LyricsView({ provider, state, dispatch, returnUrl }: LyricsViewProps) {
   const document = state.selectedTrackId === trackId ? state.document : null
 
   if (state.selectedTrackId === trackId && state.lyricsStatus === 'error') {
-    const unavailable = state.lyricsError === UNAVAILABLE_LYRICS_MESSAGE
-    const track = state.results.find((candidate) => candidate.id === trackId)
+    const kind = state.lyricsFailure?.kind ?? 'provider-unavailable'
+    const [label, heading, explanation] = LYRICS_FAILURE_COPY[kind]
+    let track = state.results.find((candidate) => candidate.id === trackId)
+    if (!track && trackId?.startsWith('lrcmux:')) {
+      try { track = decodeLrcMuxTrackSummary(trackId) } catch { /* Invalid IDs have no safe identity. */ }
+    }
+    const retrySeconds = Math.max(0, Math.ceil(((state.lyricsFailure?.retryAt ?? 0) - now) / 1000))
     return (
       <main id="main-content" className="reader-state" tabIndex={-1}>
         <AmbientLayer variant="reader" />
         <div className="canopy-space canopy-space--reader" aria-hidden="true" />
-        <p className="eyebrow">{unavailable ? 'lyrics unavailable' : 'The page is missing'}</p>
-        <h1>{unavailable ? 'no lyric sheet is available for this recording.' : 'That lyric sheet could not be found.'}</h1>
+        <p className="eyebrow">{label}</p>
+        <h1>{heading}</h1>
         {track ? <p>{track.title} — {track.artist}</p> : null}
-        <p>{state.lyricsError}</p>
-        <button type="button" onClick={() => navigate(returnUrl)}>
-          Back to search
-        </button>
+        <p>{explanation}</p>
+        <div className="reader-state__actions">
+          {kind === 'not-found' || kind === 'provider-unavailable' ? (
+            <button type="button" disabled={retrySeconds > 0} onClick={() => setLyricsAttempt((value) => value + 1)}>
+              {retrySeconds > 0 ? `retry in ${retrySeconds}s` : 'retry lyrics'}
+            </button>
+          ) : null}
+          {track ? <a href={`https://genius.com/search?q=${encodeURIComponent(`${track.title} ${track.artist}`)}`} target="_blank" rel="noopener noreferrer">search Genius ↗</a> : null}
+          {track ? <a href={`https://open.spotify.com/search/${encodeURIComponent(`${track.title} ${track.artist}`)}`} target="_blank" rel="noopener noreferrer">find on Spotify ↗</a> : null}
+          <button type="button" onClick={() => navigate(returnUrl)}>Back to search</button>
+        </div>
       </main>
     )
   }
@@ -638,14 +674,6 @@ function mergeComments(existing: GeniusComment[], incoming: GeniusComment[]) {
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError'
-}
-
-function lyricsErrorMessage(error: unknown): string {
-  if (error instanceof LrcLibLyricsUnavailableError || error instanceof LrcMuxLyricsUnavailableError
-    || ((error instanceof LrcLibRequestError || error instanceof LrcMuxRequestError) && error.status === 404)) {
-    return UNAVAILABLE_LYRICS_MESSAGE
-  }
-  return messageFrom(error)
 }
 
 function messageFrom(error: unknown): string {

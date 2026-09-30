@@ -1,3 +1,4 @@
+import type { LyricsFailure } from '../lookup/lyricsFailure'
 import type { LyricDocument, TrackSummary } from '../domain'
 
 export type LookupStatus = 'idle' | 'loading' | 'ready' | 'error'
@@ -11,6 +12,7 @@ export interface LookupState {
   lyricsStatus: LookupStatus
   searchError: string | null
   lyricsError: string | null
+  lyricsFailure: LyricsFailure | null
   searchRequestId: number
   lyricsRequestId: number
 }
@@ -24,6 +26,7 @@ export const initialLookupState: LookupState = {
   lyricsStatus: 'idle',
   searchError: null,
   lyricsError: null,
+  lyricsFailure: null,
   searchRequestId: 0,
   lyricsRequestId: 0,
 }
@@ -36,7 +39,7 @@ export type LookupAction =
   | { type: 'trackSelected'; id: string }
   | { type: 'lyricsStarted'; requestId: number; id: string }
   | { type: 'lyricsSucceeded'; requestId: number; document: LyricDocument }
-  | { type: 'lyricsFailed'; requestId: number; error: string }
+  | { type: 'lyricsFailed'; requestId: number; error: string; failure?: LyricsFailure }
   | { type: 'reset' }
 
 /** Keeps lookup UI transitions deterministic and ignores late async responses. */
@@ -64,6 +67,7 @@ export function lookupReducer(state: LookupState, action: LookupAction): LookupS
         document: null,
         lyricsStatus: 'idle',
         lyricsError: null,
+        lyricsFailure: null,
       }
     case 'lyricsStarted':
       return {
@@ -72,6 +76,7 @@ export function lookupReducer(state: LookupState, action: LookupAction): LookupS
         document: null,
         lyricsStatus: 'loading',
         lyricsError: null,
+        lyricsFailure: null,
         lyricsRequestId: action.requestId,
       }
     case 'lyricsSucceeded':
@@ -83,7 +88,7 @@ export function lookupReducer(state: LookupState, action: LookupAction): LookupS
       }
     case 'lyricsFailed':
       if (action.requestId !== state.lyricsRequestId) return state
-      return { ...state, lyricsStatus: 'error', lyricsError: action.error }
+      return { ...state, lyricsStatus: 'error', lyricsError: action.error, lyricsFailure: action.failure ?? null }
     case 'reset':
       return initialLookupState
   }

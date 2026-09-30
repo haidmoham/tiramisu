@@ -300,9 +300,36 @@ it('explains confirmed lyric absence for the exact recording and returns to its 
   }
   render(<MemoryRouter initialEntries={['/?q=Alice+Cherry']}><App provider={provider} /></MemoryRouter>)
   await user.click(await screen.findByRole('button', {name: /Alice.*Cherry/}))
-  expect(await screen.findByRole('heading', {name: 'no lyric sheet is available for this recording.'})).toBeVisible()
+  expect(await screen.findByRole('heading', {name: 'we couldn’t find lyrics for this recording yet.'})).toBeVisible()
   expect(screen.getByText('Alice — Cherry')).toBeVisible()
-  expect(screen.getByText(/current sources do not have readable lyrics/)).toBeVisible()
+  expect(screen.getByText(/current sources returned no readable lyric sheet/)).toBeVisible()
   await user.click(screen.getByRole('button', {name: 'Back to search'}))
   expect(await screen.findByRole('heading', {name: 'results for “Alice Cherry”'})).toBeVisible()
+})
+
+it('preserves metadata on a saved link and retries a temporary provider failure', async () => {
+  const {createLrcMuxTrackSummary,LrcMuxRequestError}=await import('./lookup/LrcMuxLyricsProvider')
+  const track=createLrcMuxTrackSummary({title:'Alice',artist:'Cherry',album:'Safe In Your Stare',duration:241})
+  const getLyrics=vi.fn().mockRejectedValueOnce(new LrcMuxRequestError(503)).mockResolvedValueOnce({track,lines:[{id:'1',text:'Invented test line'}]})
+  const user=userEvent.setup()
+  render(<MemoryRouter initialEntries={[`/lyrics/${track.id}`]}><App provider={{search:vi.fn(async()=>[]),getLyrics}}/></MemoryRouter>)
+  expect(await screen.findByRole('heading',{name:'the lyric source is temporarily unavailable.'})).toBeVisible()
+  expect(screen.getByText('Alice — Cherry')).toBeVisible()
+  expect(screen.getByRole('link',{name:'search Genius ↗'})).toHaveAttribute('href','https://genius.com/search?q=Alice%20Cherry')
+  await user.click(screen.getByRole('button',{name:'retry lyrics'}))
+  expect(await screen.findByText('Invented test line')).toBeVisible()
+  expect(getLyrics).toHaveBeenCalledTimes(2)
+})
+
+it.each([
+  [403,'the source does not allow this request.'],
+  [429,'the lyric source is temporarily unavailable.'],
+])('distinguishes provider status %s and respects Retry-After in the reader', async (status,heading) => {
+  const {createLrcMuxTrackSummary,LrcMuxRequestError}=await import('./lookup/LrcMuxLyricsProvider')
+  const track=createLrcMuxTrackSummary({title:'Alice',artist:'Cherry'})
+  const getLyrics=vi.fn(async()=>{throw new LrcMuxRequestError(status,'',status===429?'60':null)})
+  render(<MemoryRouter initialEntries={[`/lyrics/${track.id}`]}><App provider={{search:vi.fn(async()=>[]),getLyrics}}/></MemoryRouter>)
+  expect(await screen.findByRole('heading',{name:heading})).toBeVisible()
+  if(status===429) expect(screen.getByRole('button',{name:/retry in \d+s/})).toBeDisabled()
+  else expect(screen.queryByRole('button',{name:'retry lyrics'})).not.toBeInTheDocument()
 })

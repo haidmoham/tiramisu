@@ -121,6 +121,13 @@ export function LyricReader({
         ))}
       </ol>
 
+      {document.attribution ? <p className="lyric-reader__source">
+        lyrics from {document.attribution.url
+          ? <a href={document.attribution.url} target="_blank" rel="noopener noreferrer">{document.attribution.name} ↗</a>
+          : document.attribution.name}
+        {document.attribution.via ? ` via ${document.attribution.via}` : ''}
+      </p> : null}
+
       <div ref={tailRef} className="lyric-reader__tail" aria-hidden="true" />
 
     </article>

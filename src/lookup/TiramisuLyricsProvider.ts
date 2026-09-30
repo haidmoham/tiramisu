@@ -13,6 +13,9 @@ import {
   type LrcMuxTrackMetadata,
 } from './LrcMuxLyricsProvider'
 
+import { sameRecording } from './recordingIdentity'
+import { RecordingMismatchError } from './lyricsFailure'
+
 const SUGGEST_URL = 'https://api.lyrics.ovh/suggest/'
 const MAX_SUGGESTIONS = 12
 
@@ -101,8 +104,7 @@ export class TiramisuLyricsProvider implements LyricsProvider {
       if (suggestions.status === 'rejected') throw suggestions.reason
     }
 
-    const primaryIdentities = new Set(primaryResults.map(trackIdentity))
-    const additions = suggestedResults.filter((track) => !primaryIdentities.has(trackIdentity(track)))
+    const additions = suggestedResults.filter((track) => !primaryResults.some((primary) => sameRecording(track, primary)))
     return rankResults([...primaryResults, ...additions], normalizedQuery, field)
       .slice(0, Math.max(primaryResults.length, MAX_SUGGESTIONS))
   }
@@ -131,12 +133,13 @@ export class TiramisuLyricsProvider implements LyricsProvider {
         // exact title-and-artist match so a different recording is not shown.
         const metadata = decodeLrcMuxTrackMetadata(id)
         const candidates = await this.#primary.search(`${metadata.title} ${metadata.artist}`, signal)
-        const matchingTrack = candidates.find((candidate) =>
-          candidate.title.trim().toLowerCase() === metadata.title.trim().toLowerCase()
-          && candidate.artist.trim().toLowerCase() === metadata.artist.trim().toLowerCase(),
-        )
-        if (!matchingTrack) throw error
-        return this.#primary.getLyrics(matchingTrack.id, signal)
+        const expected = createLrcMuxTrackSummary(metadata)
+        const matches = candidates.filter((candidate) => sameRecording(expected, candidate))
+        if (matches.length > 1) throw new RecordingMismatchError()
+        if (matches.length === 0) throw error
+        const document = await this.#primary.getLyrics(matches[0].id, signal)
+        if (!sameRecording(expected, document.track)) throw new RecordingMismatchError()
+        return document
       }
     }
     throw new Error('Unknown lyrics source in track ID.')
@@ -183,10 +186,6 @@ function rankResults(
       + exactIdentityScore(track, terms) }))
     .sort((left, right) => right.score - left.score || left.index - right.index)
     .map(({ track }) => track)
-}
-
-function trackIdentity(track: TrackSummary): string {
-  return `${searchTerms(track.title).join(' ')}\u0000${searchTerms(track.artist).join(' ')}`
 }
 
 function exactIdentityScore(track: TrackSummary, terms: readonly string[]): number {

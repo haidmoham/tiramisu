@@ -182,9 +182,9 @@ describe('TiramisuLyricsProvider', () => {
     const primary = stubProvider({
       search: vi.fn(async () => [
         { id: 'lrclib:wrong', title: 'This Modern Love (Live)', artist: 'Bloc Party', collection: 'Live', source: 'lrclib' as const },
-        { id: 'lrclib:9878071', title: 'This Modern Love', artist: 'Bloc Party', collection: 'Bloc Party', source: 'lrclib' as const },
+        { id: 'lrclib:9878071', title: 'This Modern Love', artist: 'Bloc Party', collection: 'Silent Alarm', durationSeconds: 266, source: 'lrclib' as const },
       ]),
-      getLyrics: vi.fn(async (id) => inventedDocument(id)),
+      getLyrics: vi.fn(async (id) => ({...inventedDocument(id), track: {id, title: 'This Modern Love', artist: 'Bloc Party', collection: 'Silent Alarm', durationSeconds: 266, source: 'lrclib' as const}})),
     })
     const fallback = stubProvider({ getLyrics: vi.fn(async () => { throw new LrcMuxRequestError(404) }) })
     const provider = new TiramisuLyricsProvider({ primary, fallback, fetch: vi.fn() })
@@ -250,7 +250,7 @@ it('uses metadata search when the primary catalog is unavailable', async () => {
 
 it('keeps the stable primary lyric ID when both catalogs identify the same recording', async () => {
   const primary = stubProvider({search: vi.fn(async () => [{
-    id: 'lrclib:42', title: 'Alice', artist: 'Cherry', collection: 'Safe In Your Stare', source: 'lrclib' as const,
+    id: 'lrclib:42', title: 'Alice', artist: 'Cherry', collection: 'Safe In Your Stare', durationSeconds: 241, source: 'lrclib' as const,
   }])})
   const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(JSON.stringify({data: [
     {title: 'Alice', artist: {name: 'Cherry'}, album: {title: 'Safe In Your Stare'}, duration: 241},
@@ -265,4 +265,35 @@ it('reports catalog failure rather than an empty match when both lookups fail', 
     fetch: vi.fn().mockRejectedValue(new Error('metadata unavailable')),
   })
   await expect(provider.search('Alice Cherry')).rejects.toThrow('primary unavailable')
+})
+
+it.each([
+  [{id:'lrclib:1',title:'Alice (Live)',artist:'Cherry',collection:'Safe In Your Stare',durationSeconds:241,source:'lrclib' as const}],
+  [{id:'lrclib:1',title:'Alice',artist:'Cherry',collection:'Another Album',durationSeconds:241,source:'lrclib' as const}],
+  [{id:'lrclib:1',title:'Alice',artist:'Cherry',collection:'Safe In Your Stare',durationSeconds:260,source:'lrclib' as const}],
+])('does not recover metadata links through a different version', async (candidate) => {
+  const primary = stubProvider({search:vi.fn(async()=>[candidate])})
+  const fallback = stubProvider({getLyrics:vi.fn(async()=>{throw new LrcMuxRequestError(404)})})
+  const provider = new TiramisuLyricsProvider({primary,fallback,fetch:vi.fn()})
+  const id = createLrcMuxTrackSummary({title:'Alice',artist:'Cherry',album:'Safe In Your Stare',duration:241}).id
+  await expect(provider.getLyrics(id)).rejects.toMatchObject({status:404})
+  expect(primary.getLyrics).not.toHaveBeenCalled()
+})
+
+it('rejects ambiguous identical candidates instead of picking the first', async () => {
+  const candidates = [1,2].map(id=>({id:`lrclib:${id}`,title:'Alice',artist:'Cherry',collection:'Safe In Your Stare',durationSeconds:241,source:'lrclib' as const}))
+  const primary = stubProvider({search:vi.fn(async()=>candidates)})
+  const fallback = stubProvider({getLyrics:vi.fn(async()=>{throw new LrcMuxRequestError(404)})})
+  const provider = new TiramisuLyricsProvider({primary,fallback,fetch:vi.fn()})
+  const id = createLrcMuxTrackSummary({title:'Alice',artist:'Cherry',album:'Safe In Your Stare',duration:241}).id
+  await expect(provider.getLyrics(id)).rejects.toMatchObject({name:'RecordingMismatchError'})
+  expect(primary.getLyrics).not.toHaveBeenCalled()
+})
+
+it('keeps different albums in combined catalogs instead of treating them as the same recording', async () => {
+  const primary = stubProvider({search:vi.fn(async()=>[{id:'lrclib:1',title:'Alice',artist:'Cherry',collection:'Other Album',durationSeconds:241,source:'lrclib' as const}])})
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({data:[{title:'Alice',artist:{name:'Cherry'},album:{title:'Safe In Your Stare'},duration:241}]})))
+  const results=await new TiramisuLyricsProvider({primary,fetch}).search('Alice Cherry')
+  expect(results).toHaveLength(2)
+  expect(results.map(track=>track.collection)).toEqual(['Other Album','Safe In Your Stare'])
 })

@@ -299,3 +299,10 @@ html[data-theme='dark'] { --petal-lilac: #c1a9e2; --petal-rose: #d4a3ba; --petal
 .result-list[hidden] { display: none; }
 .result-card__identity .result-card__collection { color: var(--ink-faint); font-size: .7rem; }
 .lookup-message button { min-height: 2.75rem; margin-top: .75rem; }
+
+.reader-state__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .75rem; }
+.reader-state__actions a { min-height: 44px; display: inline-flex; align-items: center; padding: .75rem 1.1rem; color: var(--ink); border: 1px solid var(--line); border-radius: 999px; font: 600 .75rem/1 var(--font-ui); }
+.reader-state__actions button { min-height: 44px; }
+.reader-state__actions button:disabled { opacity: .55; cursor: wait; }
+.lyric-reader__source { width: var(--reader-column); max-width: 100%; margin: 2rem auto 0; padding-inline: 1rem; color: var(--ink-soft); font: 500 .75rem/1.5 var(--font-ui); }
+.lyric-reader__source a { color: inherit; text-decoration: underline; text-underline-offset: .2em; }

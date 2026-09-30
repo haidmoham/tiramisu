@@ -211,3 +211,12 @@ describe('TiramisuLyricsProvider', () => {
     expect(primary.search).toHaveBeenCalledTimes(1)
   })
 })
+
+it('keeps accented artist names together when ranking unaccented queries', async () => {
+  const primary = stubProvider({ search: vi.fn(async () => [
+    { id: 'lrclib:1', title: 'Bjork', artist: 'Other Artist', collection: 'Other', source: 'lrclib' as const },
+    { id: 'lrclib:2', title: 'Joga', artist: 'Björk', collection: 'Homogenic', source: 'lrclib' as const },
+  ]) })
+  const provider = new TiramisuLyricsProvider({ primary, fetch: vi.fn() })
+  expect((await provider.search('bjork')).map(({ id }) => id)).toEqual(['lrclib:2', 'lrclib:1'])
+})

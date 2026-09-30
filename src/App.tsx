@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import type { Dispatch, KeyboardEvent } from 'react'
-import { Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom'
+import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import type { LyricsProvider, LyricsSearchField, TrackSummary } from './domain'
 import { initialLookupState, lookupReducer } from './app/lookupReducer'
 import { TiramisuLyricsProvider } from './lookup'
@@ -44,54 +44,113 @@ function App({ provider = defaultProvider }: AppProps) {
   )
 }
 
+function searchUrl(query: string, field: LyricsSearchField): string {
+  const params = new URLSearchParams()
+  if (query) params.set('q', query)
+  if (field !== 'smart') params.set('by', field)
+  return params.size ? `/?${params}` : '/'
+}
+
+interface SearchReturnPosition {
+  scrollY: number
+  trackId: string
+}
+
 function AppRoutes({ provider }: { provider: LyricsProvider }) {
   const [state, dispatch] = useReducer(lookupReducer, initialLookupState)
   const [searchField, setSearchField] = useState<LyricsSearchField>('smart')
+  const [submitted, setSubmitted] = useState({ query: '', field: 'smart' as LyricsSearchField })
   const searchRequestId = useRef(0)
   const searchController = useRef<AbortController | null>(null)
+  const searchTimeout = useRef<number | null>(null)
+  const lastSearchUrl = useRef<string | null>(null)
+  const returnPosition = useRef<SearchReturnPosition | null>(null)
+  const location = useLocation()
+  const navigate = useNavigate()
 
-  const search = useCallback(async (query: string, field: LyricsSearchField = 'smart') => {
+  const search = useCallback(async (query: string, field: LyricsSearchField) => {
     searchController.current?.abort()
+    if (searchTimeout.current !== null) window.clearTimeout(searchTimeout.current)
     const controller = new AbortController()
     const requestId = ++searchRequestId.current
     searchController.current = controller
+    lastSearchUrl.current = searchUrl(query, field)
+    setSubmitted({ query, field })
+    setSearchField(field)
+    dispatch({ type: 'queryChanged', query })
     dispatch({ type: 'searchStarted', requestId })
+    const timeout = window.setTimeout(() => {
+      controller.abort()
+      dispatch({ type: 'searchFailed', requestId, error: 'The search took too long. Please try again.' })
+    }, 20_000)
+    searchTimeout.current = timeout
 
     try {
       const results = await provider.search(query, controller.signal, field)
-      dispatch({ type: 'searchSucceeded', requestId, results })
+      if (!controller.signal.aborted) dispatch({ type: 'searchSucceeded', requestId, results })
     } catch (error) {
-      if (isAbortError(error)) return
+      if (controller.signal.aborted || isAbortError(error)) return
       dispatch({ type: 'searchFailed', requestId, error: messageFrom(error) })
+    } finally {
+      window.clearTimeout(timeout)
+      if (searchTimeout.current === timeout) searchTimeout.current = null
     }
   }, [provider])
 
   useEffect(() => {
-    void search('')
-    return () => searchController.current?.abort()
-  }, [search])
+    if (location.pathname !== '/') return
+    const params = new URLSearchParams(location.search)
+    const query = (params.get('q') ?? '').trim().replace(/\s+/g, ' ')
+    const mode = params.get('by')
+    const field = mode === 'title' || mode === 'artist' ? mode : 'smart'
+    const url = searchUrl(query, field)
+    if (lastSearchUrl.current === url) return
+    returnPosition.current = null
+    void search(query, field)
+  }, [location.pathname, location.search, search])
+
+  useEffect(() => () => {
+    searchController.current?.abort()
+    lastSearchUrl.current = null
+    if (searchTimeout.current !== null) window.clearTimeout(searchTimeout.current)
+  }, [provider])
+
+  const submitSearch = async (query: string, field: LyricsSearchField) => {
+    const normalizedQuery = query.trim().replace(/\s+/g, ' ')
+    const url = searchUrl(normalizedQuery, field)
+    returnPosition.current = null
+    if (`${location.pathname}${location.search}` === url) {
+      await search(normalizedQuery, field)
+    } else {
+      navigate(url)
+    }
+  }
 
   return (
     <Routes>
-      <Route
-        path="/"
-        element={
-          <SearchView
-            query={state.query}
-            status={state.searchStatus}
-            results={state.results}
-            error={state.searchError}
-            searchField={searchField}
-            onQueryChange={(query) => dispatch({ type: 'queryChanged', query })}
-            onSearchFieldChange={setSearchField}
-            onSearch={search}
-          />
-        }
-      />
-      <Route
-        path="/lyrics/:trackId"
-        element={<LyricsView provider={provider} state={state} dispatch={dispatch} />}
-      />
+      <Route path="/" element={
+        <SearchView
+          query={state.query}
+          submittedQuery={submitted.query}
+          status={state.searchStatus}
+          results={state.results}
+          error={state.searchError}
+          searchField={searchField}
+          onQueryChange={(query) => dispatch({ type: 'queryChanged', query })}
+          onSearchFieldChange={setSearchField}
+          onSearch={submitSearch}
+          onRetry={() => search(submitted.query, submitted.field)}
+          returnPosition={returnPosition}
+          onOpen={(trackId) => {
+            returnPosition.current = { scrollY: window.scrollY, trackId }
+            navigate(`/lyrics/${trackId}`)
+          }}
+        />
+      } />
+      <Route path="/lyrics/:trackId" element={
+        <LyricsView provider={provider} state={state} dispatch={dispatch}
+          returnUrl={searchUrl(submitted.query, submitted.field)} />
+      } />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
@@ -99,6 +158,10 @@ function AppRoutes({ provider }: { provider: LyricsProvider }) {
 
 interface SearchViewProps {
   query: string
+  submittedQuery: string
+  onRetry: () => Promise<void>
+  onOpen: (trackId: string) => void
+  returnPosition: { current: SearchReturnPosition | null }
   status: 'idle' | 'loading' | 'ready' | 'error'
   results: readonly TrackSummary[]
   error: string | null
@@ -110,6 +173,10 @@ interface SearchViewProps {
 
 function SearchView({
   query,
+  submittedQuery,
+  onRetry,
+  onOpen,
+  returnPosition,
   status,
   results,
   error,
@@ -118,10 +185,22 @@ function SearchView({
   onSearchFieldChange,
   onSearch,
 }: SearchViewProps) {
-  const navigate = useNavigate()
+  const shelfRef = useRef<HTMLOListElement>(null)
+  useEffect(() => {
+    if (status !== 'ready' || !returnPosition.current) return
+    const position = returnPosition.current
+    const frame = requestAnimationFrame(() => {
+      const card = Array.from(shelfRef.current?.querySelectorAll<HTMLButtonElement>('[data-track-id]') ?? [])
+        .find((button) => button.dataset.trackId === position.trackId)
+      card?.focus({ preventScroll: true })
+      window.scrollTo({ top: position.scrollY, behavior: 'instant' })
+      returnPosition.current = null
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [status, returnPosition])
   const isLoading = status === 'loading'
   const resultCount = status === 'ready'
-    ? query
+    ? submittedQuery
       ? `${results.length} ${results.length === 1 ? 'match' : 'matches'}`
       : `${results.length} lyric ${results.length === 1 ? 'sheet' : 'sheets'}`
     : ''
@@ -174,15 +253,22 @@ function SearchView({
                 name="query"
                 type="search"
                 value={query}
-                placeholder="Title, artist, or collection"
+                placeholder="Song title or artist"
+                aria-describedby="search-hint"
                 autoComplete="off"
                 enterKeyHint="search"
                 onChange={(event) => onQueryChange(event.target.value)}
               />
-              <button type="submit" disabled={isLoading}>
-                <span>{isLoading ? 'Looking…' : 'Look up'}</span>
+              <button type="submit">
+                <span>Look up</span>
                 <span aria-hidden="true">↗</span>
               </button>
+            </div>
+            <div className="search-form__help">
+              <p id="search-hint">try a song title, artist, or both.</p>
+              {query || submittedQuery ? (
+                <button type="button" onClick={() => void onSearch('', 'smart')}>clear search</button>
+              ) : null}
             </div>
           </form>
         </section>
@@ -193,7 +279,7 @@ function SearchView({
           aria-busy={isLoading}
         >
           <div className="result-shelf__heading">
-            <h2 id="result-heading">{query ? 'results' : 'lyrics'}</h2>
+            <h2 id="result-heading">{submittedQuery ? `results for “${submittedQuery}”` : 'lyrics'}</h2>
             <span className="result-shelf__count">
               {resultCount ? <span className="result-shelf__count-dot" aria-hidden="true" /> : null}
               {resultCount}
@@ -202,37 +288,43 @@ function SearchView({
 
           <p className="sr-only" role="status" aria-live="polite">
             {isLoading
-              ? `Looking for ${query || 'lyrics'}.`
+              ? `Looking for ${submittedQuery || 'lyrics'}.`
               : status === 'ready'
-                ? `${results.length} ${query ? `matches for “${query}”` : 'lyric sheets'}. Select a result to open its lyric sheet.`
+                ? `${results.length} ${submittedQuery ? `${results.length === 1 ? 'match' : 'matches'} for “${submittedQuery}”` : 'lyric sheets'}. Select a result to open its lyric sheet.`
                 : ''}
           </p>
+
+          {isLoading ? <p className="search-feedback">looking for {submittedQuery ? `“${submittedQuery}”` : 'lyric sheets'}…</p> : null}
 
           {status === 'error' ? (
             <div className="lookup-message" role="alert">
               <p>Couldn’t load lyrics.</p>
-              <span>{error}</span>
+              <span>{error?.includes('took too long') ? error : 'check your connection and try again.'}</span>
+              <button type="button" onClick={() => void onRetry()}>try again</button>
             </div>
           ) : null}
 
           {status === 'ready' && results.length === 0 ? (
             <div className="lookup-message">
-              <p>No lyric sheet matched “{query}”.</p>
-              <button type="button" onClick={() => void onSearch('', searchField)}>Show all</button>
+              <p>No lyric sheet matched “{submittedQuery}”.</p>
+              <span>try fewer words, or switch between title and artist.</span>
+              <button type="button" onClick={() => void onSearch('', 'smart')}>Show all</button>
             </div>
           ) : null}
 
-          <ol className="result-list" data-loading={isLoading}>
+          <ol ref={shelfRef} className="result-list" hidden={status !== 'ready'}>
             {results.map((track, index) => (
               <li key={track.id}>
                 <button
                   type="button"
                   className="result-card"
-                  onClick={() => navigate(`/lyrics/${track.id}`)}
+                  data-track-id={track.id}
+                  onClick={() => onOpen(track.id)}
                 >
                   <span className="result-card__identity">
                     <strong>{track.title}</strong>
                     <span>{track.artist}</span>
+                    {track.collection && track.collection !== 'Unknown album' ? <span className="result-card__collection">{track.collection}</span> : null}
                   </span>
                   <span className="result-card__toy">
                     <ResultSymbolToy seed={`${track.id}-${index}`} />
@@ -266,6 +358,7 @@ interface LyricsViewProps {
   provider: LyricsProvider
   state: AppState
   dispatch: AppDispatch
+  returnUrl: string
 }
 
 interface TrackCommentsState {
@@ -281,7 +374,7 @@ const initialTrackCommentsState: TrackCommentsState = {
   response: null,
 }
 
-function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
+function LyricsView({ provider, state, dispatch, returnUrl }: LyricsViewProps) {
   const { trackId } = useParams()
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' })
@@ -335,7 +428,7 @@ function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
         <p className="eyebrow">The page is missing</p>
         <h1>That lyric sheet could not be found.</h1>
         <p>{state.lyricsError}</p>
-        <button type="button" onClick={() => navigate('/')}>
+        <button type="button" onClick={() => navigate(returnUrl)}>
           Back to search
         </button>
       </main>
@@ -439,7 +532,7 @@ function LyricsView({ provider, state, dispatch }: LyricsViewProps) {
     <main id="main-content" className="reader-view" tabIndex={-1} data-focus={focusMode}>
       <AmbientLayer variant="reader" />
       <nav className="reader-tools" aria-label="Reader controls">
-        <button className="reader-tools__back" tabIndex={focusMode ? -1 : 0} type="button" onClick={() => navigate('/')}>
+        <button className="reader-tools__back" tabIndex={focusMode ? -1 : 0} type="button" onClick={() => navigate(returnUrl)}>
           <span aria-hidden="true">←</span>
           <span>Search</span>
         </button>

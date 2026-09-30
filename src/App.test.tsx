@@ -1,5 +1,6 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { StrictMode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import type { LyricDocument } from './domain'
@@ -187,5 +188,104 @@ describe('App routing and lookup states', () => {
     await user.keyboard('{Home}')
     expect(lyricsTab).toHaveFocus()
     expect(lyricsTab).toHaveAttribute('aria-selected', 'true')
+  })
+})
+
+describe('search identity and recovery', () => {
+  it('keeps results attached to the submitted query while the draft changes', async () => {
+    const user = userEvent.setup()
+    renderApp()
+    const input = await screen.findByRole('searchbox')
+    await user.type(input, 'modern')
+    await user.click(screen.getByRole('button', { name: /Look up/ }))
+    await screen.findByRole('heading', { name: 'results for “modern”' })
+    await user.clear(input)
+    await user.type(input, 'something else')
+    expect(screen.getByRole('status')).toHaveTextContent('match for “modern”')
+    expect(screen.getByRole('heading', { name: 'results for “modern”' })).toBeVisible()
+  })
+
+  it('clears the failed query and mode when restoring the curated shelf', async () => {
+    const user = userEvent.setup()
+    renderApp()
+    await user.type(screen.getByRole('searchbox'), 'no such sheet')
+    await user.click(screen.getByRole('radio', { name: 'Artist' }))
+    await user.click(screen.getByRole('button', { name: /Look up/ }))
+    await user.click(await screen.findByRole('button', { name: 'Show all' }))
+    expect(await screen.findByText('3 lyric sheets')).toBeVisible()
+    expect(screen.getByRole('searchbox')).toHaveValue('')
+    expect(screen.getByRole('radio', { name: 'Smart' })).toBeChecked()
+  })
+
+  it('loads a bookmarked query and mode', async () => {
+    renderApp('/?q=modern&by=title')
+    expect(await screen.findByRole('button', { name: /This Modern Love/ })).toBeVisible()
+    expect(screen.getByRole('searchbox')).toHaveValue('modern')
+    expect(screen.getByRole('radio', { name: 'Title' })).toBeChecked()
+  })
+
+  it('retries the submitted search after an error', async () => {
+    const user = userEvent.setup()
+    const provider = new FixtureLyricsProvider({ latencyMs: 0 })
+    const search = vi.spyOn(provider, 'search')
+      .mockRejectedValueOnce(new Error('offline'))
+    render(<MemoryRouter initialEntries={['/?q=modern']}><App provider={provider} /></MemoryRouter>)
+    expect(await screen.findByRole('alert')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'try again' }))
+    expect(await screen.findByRole('button', { name: /This Modern Love/ })).toBeVisible()
+    expect(search).toHaveBeenLastCalledWith('modern', expect.any(AbortSignal), 'smart')
+  })
+})
+
+
+describe('search request lifecycle', () => {
+  it('loads the shelf under StrictMode after effect cleanup', async () => {
+    render(<StrictMode><MemoryRouter><App provider={new FixtureLyricsProvider({ latencyMs: 0 })} /></MemoryRouter></StrictMode>)
+    expect(await screen.findByText('3 lyric sheets')).toBeVisible()
+  })
+
+  it('allows a replacement search and ignores an older provider response', async () => {
+    const user = userEvent.setup()
+    const provider = new FixtureLyricsProvider({ latencyMs: 0 })
+    const tracks = await provider.search('modern')
+    let resolveOld: (value: typeof tracks) => void = () => {}
+    vi.spyOn(provider, 'search').mockImplementation(async (query) => {
+      if (query === 'old') return new Promise((resolve) => { resolveOld = resolve })
+      return tracks
+    })
+    render(<MemoryRouter><App provider={provider} /></MemoryRouter>)
+    await screen.findByRole('button', { name: /This Modern Love/ })
+    const input = screen.getByRole('searchbox')
+    await user.type(input, 'old')
+    await user.click(screen.getByRole('button', { name: /Look up/ }))
+    expect(screen.queryByRole('button', { name: /This Modern Love/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Look up/ })).toBeEnabled()
+    await user.clear(input)
+    await user.type(input, 'new')
+    await user.click(screen.getByRole('button', { name: /Look up/ }))
+    await screen.findByRole('button', { name: /This Modern Love/ })
+    await act(async () => resolveOld([]))
+    expect(screen.getByRole('status')).toHaveTextContent('1 match for “new”')
+    expect(screen.getByRole('button', { name: /This Modern Love/ })).toBeVisible()
+  })
+
+  it('bounds a hung search and ignores success after the timeout', async () => {
+    const provider = new FixtureLyricsProvider({ latencyMs: 0 })
+    const tracks = await provider.search('modern')
+    let resolveSearch: (value: typeof tracks) => void = () => {}
+    vi.spyOn(provider, 'search').mockImplementation(() => new Promise((resolve) => { resolveSearch = resolve }))
+    const originalSetTimeout = window.setTimeout.bind(window)
+    let timeoutSearch: () => void = () => {}
+    const timer = vi.spyOn(window, 'setTimeout').mockImplementation((handler, delay, ...args) => {
+      if (delay === 20_000 && typeof handler === 'function') timeoutSearch = handler as () => void
+      return originalSetTimeout(handler, delay, ...args)
+    })
+    render(<MemoryRouter initialEntries={['/?q=modern']}><App provider={provider} /></MemoryRouter>)
+    await act(async () => timeoutSearch())
+    expect(screen.getByRole('alert')).toHaveTextContent('The search took too long')
+    await act(async () => resolveSearch(tracks))
+    expect(screen.getByRole('alert')).toBeVisible()
+    expect(screen.queryByRole('button', { name: /This Modern Love/ })).not.toBeInTheDocument()
+    timer.mockRestore()
   })
 })

@@ -42,6 +42,6 @@ Keep the shared `← shin86.dev` link outside the route switch. Direct lyric lin
 
 The presentation layer never consumes provider response objects. The canvas is decorative: lookup, reading, focus mode, native scrolling, and accessibility remain available without motion. Reduced-motion preference keeps a still composition.
 
-## Optional Genius notes
+## Optional Genius annotations
 
-The reader also has a separate comments/notes panel. `api/genius-comments/` serves it through a Vercel function; `server/genius-comments/` normalizes the response. Set `GENIUS_ACCESS_TOKEN` only on the server to enable it. Plain `npm run dev` serves the Vite frontend, not that production function. The panel can report unavailable notes and retain an explicit Genius source link; lyric lookup does not depend on it.
+The reader also has a separate Annotations panel showing Genius lyric annotations from the official `/referents` endpoint, rather than song-level discussion comments. `api/genius-comments/` serves it through a Vercel function; `server/genius-comments/` normalizes the response. Set `GENIUS_ACCESS_TOKEN` only on the server to enable it. Plain `npm run dev` serves the Vite frontend, not that production function. The panel can report unavailable annotations and retain an explicit Genius source link; lyric lookup does not depend on it.

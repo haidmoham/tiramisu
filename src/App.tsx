@@ -520,7 +520,8 @@ function LyricsView({ provider, state, dispatch, returnUrl }: LyricsViewProps) {
         const prior = previous.trackId === trackId ? previous.response : null
         return {
           trackId,
-          mode: 'comments',
+          // Finishing a request must not undo a return to lyrics while it loaded.
+          mode: previous.mode,
           status: 'ready',
           response: page === 1
             ? payload
@@ -534,7 +535,7 @@ function LyricsView({ provider, state, dispatch, returnUrl }: LyricsViewProps) {
     } catch (error) {
       if (isAbortError(error) || controller.signal.aborted) return
       if (commentsRequestId.current !== requestId) return
-      setTrackComments({ trackId, mode: 'comments', status: 'error', response: null })
+      setTrackComments((previous) => ({ trackId, mode: previous.mode, status: 'error', response: null }))
     }
   }
 
@@ -607,7 +608,7 @@ function LyricsView({ provider, state, dispatch, returnUrl }: LyricsViewProps) {
                 onKeyDown={handleReaderTabKeyDown}
                 onClick={showComments}
               >
-                Comments
+                Annotations
               </button>
             </div>
           ) : null}

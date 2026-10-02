@@ -31,8 +31,8 @@ describe('CommentsPanel states', () => {
     renderPanel({ status: 'loading', response: null })
 
     expect(screen.getByRole('heading', { name: 'This Modern Love' })).toBeVisible()
-    expect(screen.getByRole('status')).toHaveTextContent('Gathering the public notes…')
-    expect(screen.getByLabelText('Comments source: Genius')).toBeVisible()
+    expect(screen.getByRole('status')).toHaveTextContent('Gathering the public annotations…')
+    expect(screen.getByLabelText('Annotations source: Genius')).toBeVisible()
   })
 
   it('shows genuine populated notes with source, author, score, and count', () => {
@@ -43,10 +43,10 @@ describe('CommentsPanel states', () => {
       },
     })
 
-    expect(screen.getByText('1 public note')).toBeVisible()
+    expect(screen.getByText('1 public annotation')).toBeVisible()
     expect(screen.getByText('A real public note.')).toBeVisible()
     expect(screen.getByText('Mina')).toBeVisible()
-    expect(screen.getByText('1 note')).toBeVisible()
+    expect(screen.getByText('1 vote')).toBeVisible()
     expect(screen.getByRole('link', { name: 'Open this song on Genius' })).toHaveAttribute(
       'href',
       'https://genius.com/Bloc-party-this-modern-love-lyrics',
@@ -62,8 +62,8 @@ describe('CommentsPanel states', () => {
       },
     })
 
-    expect(screen.getByRole('heading', { name: 'No public notes came back for this song.' })).toBeVisible()
-    expect(screen.getByText(/won’t fill the page with invented discussion/)).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'No public annotations came back for this song.' })).toBeVisible()
+    expect(screen.getByText(/won’t fill the page with invented annotations/)).toBeVisible()
     await user.click(screen.getByRole('button', { name: 'Back to lyrics' }))
     expect(onReturnToLyrics).toHaveBeenCalledTimes(1)
     expect(screen.getByRole('link', { name: /Open on Genius/ })).toBeVisible()
@@ -79,7 +79,7 @@ describe('CommentsPanel states', () => {
       },
     })
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Genius notes aren’t available here right now.')
+    expect(screen.getByRole('alert')).toHaveTextContent('Genius annotations aren’t available here right now.')
     expect(screen.getAllByRole('link', { name: /Genius/ })).toHaveLength(2)
     await user.click(screen.getByRole('button', { name: 'Back to lyrics' }))
     expect(onReturnToLyrics).toHaveBeenCalledTimes(1)
@@ -89,7 +89,7 @@ describe('CommentsPanel states', () => {
     const user = userEvent.setup()
     const { onRetry } = renderPanel({ status: 'error', response: null })
 
-    expect(screen.getByRole('alert')).toHaveTextContent('We couldn’t reach the notes.')
+    expect(screen.getByRole('alert')).toHaveTextContent('We couldn’t reach the annotations.')
     await user.click(screen.getByRole('button', { name: 'Try again' }))
     expect(onRetry).toHaveBeenCalledTimes(1)
   })

@@ -101,7 +101,7 @@ describe('App routing and lookup states', () => {
     expect(screen.getByRole('searchbox')).toBeInTheDocument()
   })
 
-  it('loads Genius comments only when the reader opens comments', async () => {
+  it('loads Genius annotations only when the reader opens annotations', async () => {
     const user = userEvent.setup()
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       songUrl: 'https://genius.com/Bloc-party-this-modern-love-lyrics',
@@ -113,7 +113,7 @@ describe('App routing and lookup states', () => {
     await user.click(await screen.findByRole('button', { name: /This Modern Love/ }))
     expect(fetchMock).not.toHaveBeenCalled()
 
-    await user.click(screen.getByRole('tab', { name: 'Comments' }))
+    await user.click(screen.getByRole('tab', { name: 'Annotations' }))
 
     expect(await screen.findByText('A plain old song note.')).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(1)
@@ -125,11 +125,11 @@ describe('App routing and lookup states', () => {
     )
 
     await user.click(screen.getByRole('tab', { name: 'Lyrics' }))
-    await user.click(screen.getByRole('tab', { name: 'Comments' }))
+    await user.click(screen.getByRole('tab', { name: 'Annotations' }))
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
-  it('keeps lyrics intact when Genius comments fail and allows switching back', async () => {
+  it('keeps lyrics intact when Genius annotations fail and allows switching back', async () => {
     const user = userEvent.setup()
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       songUrl: 'https://genius.com/Bloc-party-this-modern-love-lyrics',
@@ -140,12 +140,56 @@ describe('App routing and lookup states', () => {
     renderApp()
 
     await user.click(await screen.findByRole('button', { name: /This Modern Love/ }))
-    await user.click(screen.getByRole('tab', { name: 'Comments' }))
+    await user.click(screen.getByRole('tab', { name: 'Annotations' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Genius notes aren’t available here right now.')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Genius annotations aren’t available here right now.')
     await user.click(screen.getByRole('button', { name: 'Back to lyrics' }))
     await waitFor(() => expect(screen.getByRole('heading', { name: 'This Modern Love' })).toBeVisible())
     expect(screen.getByText('[Licensed lyrics are not loaded in this preview.]')).toBeVisible()
+  })
+
+  it.each(['success', 'error'] as const)('keeps the reader on lyrics after a late annotation %s', async (outcome) => {
+    const user = userEvent.setup()
+    let finishRequest: (response: Response) => void = () => {}
+    const fetchMock = vi.fn<typeof fetch>().mockImplementationOnce(() => new Promise((resolve) => {
+      finishRequest = resolve
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    renderApp()
+
+    await user.click(await screen.findByRole('button', { name: /This Modern Love/ }))
+    const lyricText = screen.getByText('[Licensed lyrics are not loaded in this preview.]')
+    const lyricsTab = screen.getByRole('tab', { name: 'Lyrics' })
+    const annotationsTab = screen.getByRole('tab', { name: 'Annotations' })
+
+    await user.click(annotationsTab)
+    await user.click(lyricsTab)
+    await user.click(annotationsTab)
+    await user.click(lyricsTab)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(lyricsTab).toHaveAttribute('aria-selected', 'true')
+
+    await act(async () => finishRequest(new Response(JSON.stringify({
+      songUrl: 'https://genius.com/Bloc-party-this-modern-love-lyrics',
+      comments: [{ id: 'late-1', body: 'A delayed annotation.', author: 'Mina' }],
+    }), { status: outcome === 'success' ? 200 : 502 })))
+
+    expect(lyricsTab).toHaveAttribute('aria-selected', 'true')
+    expect(annotationsTab).toHaveAttribute('aria-selected', 'false')
+    expect(lyricText).toBeVisible()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+    await user.click(annotationsTab)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    if (outcome === 'success') {
+      expect(screen.getByText('A delayed annotation.')).toBeVisible()
+    } else {
+      expect(screen.getByRole('alert')).toHaveTextContent('We couldn’t reach the annotations.')
+      fetchMock.mockResolvedValueOnce(Response.json({ comments: [] }))
+      await user.click(screen.getByRole('button', { name: 'Try again' }))
+      expect(await screen.findByRole('heading', { name: 'No public annotations came back for this song.' })).toBeVisible()
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    }
   })
 
   it('keeps focus mode lyrics-only', async () => {
@@ -155,11 +199,11 @@ describe('App routing and lookup states', () => {
     await user.click(await screen.findByRole('button', { name: /This Modern Love/ }))
     await user.click(screen.getByRole('button', { name: 'Focus reading' }))
 
-    expect(screen.queryByRole('tab', { name: 'Comments' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Annotations' })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'This Modern Love' })).toBeVisible()
 
     await user.click(screen.getByRole('button', { name: 'Exit focus' }))
-    expect(screen.getByRole('tab', { name: 'Comments' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Annotations' })).toBeInTheDocument()
   })
 
   it('implements keyboard navigation for the reader tabs', async () => {
@@ -173,7 +217,7 @@ describe('App routing and lookup states', () => {
 
     await user.click(await screen.findByRole('button', { name: /This Modern Love/ }))
     const lyricsTab = screen.getByRole('tab', { name: 'Lyrics' })
-    const commentsTab = screen.getByRole('tab', { name: 'Comments' })
+    const commentsTab = screen.getByRole('tab', { name: 'Annotations' })
 
     expect(lyricsTab).toHaveAttribute('tabindex', '0')
     expect(commentsTab).toHaveAttribute('tabindex', '-1')

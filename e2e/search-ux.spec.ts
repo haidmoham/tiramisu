@@ -279,7 +279,7 @@ test.describe('search UX', () => {
     const commentsRequest = page.waitForRequest((request) =>
       request.url().includes('/api/genius-comments?'),
     )
-    await page.getByRole('tab', { name: 'Comments' }).click()
+    await page.getByRole('tab', { name: 'Annotations' }).click()
     expect(new URL((await commentsRequest).url()).searchParams.get('title')).toBe('This Modern Love')
     await expect(page.getByText('The chorus feels like a page turning.')).toBeVisible()
     await expect(page.getByRole('link', { name: /Open this song on Genius/ })).toHaveAttribute(
@@ -294,7 +294,7 @@ test.describe('search UX', () => {
     await focusToggle.click()
     await expect(focusToggle).toHaveAttribute('aria-pressed', 'true')
     await expect(page.locator('.reader-view')).toHaveAttribute('data-focus', 'true')
-    await expect(page.getByRole('tab', { name: 'Comments' })).toHaveCount(0)
+    await expect(page.getByRole('tab', { name: 'Annotations' })).toHaveCount(0)
   })
 
   test('opens the featured sheet and recovers an old saved LrcMux link', async ({ page }) => {

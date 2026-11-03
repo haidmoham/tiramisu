@@ -4,6 +4,7 @@ import {
   TIRAMISU_DEFAULT_TRACKS,
   TiramisuLyricsProvider,
 } from './TiramisuLyricsProvider'
+import { LrcLibRequestError } from './LrcLibLyricsProvider'
 import { createLrcMuxTrackSummary, LrcMuxRequestError } from './LrcMuxLyricsProvider'
 
 function stubProvider(overrides: Partial<LyricsProvider> = {}): LyricsProvider {
@@ -112,8 +113,8 @@ describe('TiramisuLyricsProvider', () => {
 
     expect(titleResults[0]).toMatchObject({ id: 'lrclib:1' })
     expect(artistResults[0]).toMatchObject({ id: 'lrclib:2' })
-    expect(primary.search).toHaveBeenNthCalledWith(1, 'fear sza', undefined, 'title')
-    expect(primary.search).toHaveBeenNthCalledWith(2, 'fear sza', undefined, 'artist')
+    expect(primary.search).toHaveBeenNthCalledWith(1, 'fear sza', expect.any(AbortSignal), 'title')
+    expect(primary.search).toHaveBeenNthCalledWith(2, 'fear sza', expect.any(AbortSignal), 'artist')
   })
 
   it('turns metadata suggestions into stable fallback results when LRCLIB is empty', async () => {
@@ -173,8 +174,8 @@ describe('TiramisuLyricsProvider', () => {
     await provider.getLyrics('lrclib:42')
     await provider.getLyrics('lrcmux:encoded')
 
-    expect(primary.getLyrics).toHaveBeenCalledWith('lrclib:42', undefined)
-    expect(fallback.getLyrics).toHaveBeenCalledWith('lrcmux:encoded', undefined)
+    expect(primary.getLyrics).toHaveBeenCalledWith('lrclib:42', expect.any(AbortSignal))
+    expect(fallback.getLyrics).toHaveBeenCalledWith('lrcmux:encoded', expect.any(AbortSignal))
     await expect(provider.getLyrics('unknown:1')).rejects.toThrow('Unknown lyrics source')
   })
 
@@ -193,11 +194,11 @@ describe('TiramisuLyricsProvider', () => {
     const provider = new TiramisuLyricsProvider({ primary, fallback, fetch: vi.fn() })
 
     await expect(provider.getLyrics(savedTrack.id)).resolves.toMatchObject({ track: { id: 'lrclib:9878071' } })
-    expect(primary.search).toHaveBeenCalledWith('This Modern Love Bloc Party', undefined)
-    expect(primary.getLyrics).toHaveBeenCalledWith('lrclib:9878071', undefined)
+    expect(primary.search).toHaveBeenCalledWith('This Modern Love Bloc Party', expect.any(AbortSignal))
+    expect(primary.getLyrics).toHaveBeenCalledWith('lrclib:9878071', expect.any(AbortSignal))
   })
 
-  it('does not substitute a different song or retry a provider outage', async () => {
+  it('does not substitute a different song during missing-track or outage recovery', async () => {
     const savedTrack = createLrcMuxTrackSummary({ title: 'This Modern Love', artist: 'Bloc Party' })
     const primary = stubProvider({ search: vi.fn(async () => [
       { id: 'lrclib:other', title: 'This Modern Love (Live)', artist: 'Bloc Party', collection: 'Live', source: 'lrclib' as const },
@@ -211,7 +212,7 @@ describe('TiramisuLyricsProvider', () => {
     const outage = new LrcMuxRequestError(503)
     fallback.getLyrics = vi.fn(async () => { throw outage })
     await expect(provider.getLyrics(savedTrack.id)).rejects.toBe(outage)
-    expect(primary.search).toHaveBeenCalledTimes(1)
+    expect(primary.search).toHaveBeenCalledTimes(2)
   })
 })
 
@@ -312,4 +313,144 @@ it('preserves distinct recordings within metadata suggestions and removes exact 
   expect(results.map(({ collection, durationSeconds }) => [collection, durationSeconds])).toEqual([
     ['First Album', 241], ['Second Album', 241], ['First Album', 260],
   ])
+})
+
+
+describe('independent provider recovery', () => {
+  const track: TrackSummary = {
+    id: 'lrclib:512', title: 'High Tops', artist: 'Del Water Gap',
+    collection: '1 (646) 943 2672 (Extended Play)', durationSeconds: 238, source: 'lrclib',
+  }
+  const fallbackTrack = createLrcMuxTrackSummary({
+    title: track.title, artist: track.artist, album: track.collection, duration: track.durationSeconds,
+  })
+  const document: LyricDocument = {
+    track: fallbackTrack, lines: [{ id: '1', text: 'Original regression sample.' }],
+    attribution: { name: 'Independent source', via: 'LrcMux' },
+  }
+
+  function stalledRequest(signal?: AbortSignal): Promise<never> {
+    return new Promise((_, reject) => {
+      signal?.addEventListener('abort', () => reject(signal.reason), { once: true })
+    })
+  }
+
+  it('returns available metadata when primary search stalls', async () => {
+    const primary = stubProvider({ search: vi.fn((_query, signal) => stalledRequest(signal)) })
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [{
+      title: track.title, artist: { name: track.artist },
+      album: { title: track.collection }, duration: track.durationSeconds,
+    }] })))
+    const provider = new TiramisuLyricsProvider({ primary, fetch, timeoutMs: 20 })
+    await expect(provider.search('High Tops Del Water Gap')).resolves.toEqual([fallbackTrack])
+  })
+
+  it.each([new LrcLibRequestError(503), new TypeError('Failed to fetch'), new LrcLibRequestError(404)])(
+    'recovers a selected LRCLIB recording after %s', async error => {
+      const primary = stubProvider({
+        search: vi.fn(async () => [track]), getLyrics: vi.fn(async () => { throw error }),
+      })
+      const fallback = stubProvider({ getLyrics: vi.fn(async () => document) })
+      const provider = new TiramisuLyricsProvider({ primary, fallback, fetch: vi.fn() })
+      await provider.search(track.title)
+      await expect(provider.getLyrics(track.id)).resolves.toEqual(document)
+      expect(fallback.getLyrics).toHaveBeenCalledWith(fallbackTrack.id, expect.any(AbortSignal))
+    },
+  )
+
+  it('gives the independent provider time after a stalled detail request', async () => {
+    const primary = stubProvider({
+      search: vi.fn(async () => [track]), getLyrics: vi.fn((_id, signal) => stalledRequest(signal)),
+    })
+    const fallback = stubProvider({ getLyrics: vi.fn(async () => document) })
+    const provider = new TiramisuLyricsProvider({ primary, fallback, fetch: vi.fn(), timeoutMs: 20 })
+    await provider.search(track.title)
+    await expect(provider.getLyrics(track.id)).resolves.toEqual(document)
+  })
+
+  it('rejects a different recording returned by recovery', async () => {
+    const primary = stubProvider({
+      search: vi.fn(async () => [track]), getLyrics: vi.fn(async () => { throw new LrcLibRequestError(503) }),
+    })
+    const fallback = stubProvider({ getLyrics: vi.fn(async () => ({
+      ...document, track: { ...fallbackTrack, title: 'High Tops (Stripped)', durationSeconds: 250 },
+    })) })
+    const provider = new TiramisuLyricsProvider({ primary, fallback, fetch: vi.fn() })
+    await provider.search(track.title)
+    await expect(provider.getLyrics(track.id)).rejects.toMatchObject({ name: 'RecordingMismatchError' })
+  })
+
+  it('does not recover restricted requests or IDs without verified metadata', async () => {
+    const primary = stubProvider({
+      search: vi.fn(async () => [track]), getLyrics: vi.fn(async () => { throw new LrcLibRequestError(403) }),
+    })
+    const fallback = stubProvider()
+    const provider = new TiramisuLyricsProvider({ primary, fallback, fetch: vi.fn() })
+    await provider.search(track.title)
+    await expect(provider.getLyrics(track.id)).rejects.toMatchObject({ status: 403 })
+    primary.getLyrics = vi.fn(async () => { throw new LrcLibRequestError(503) })
+    await expect(provider.getLyrics('lrclib:unknown')).rejects.toMatchObject({ status: 503 })
+    expect(fallback.getLyrics).not.toHaveBeenCalled()
+  })
+
+  it('does not start recovery after the reader cancels the request', async () => {
+    const primary = stubProvider({
+      search: vi.fn(async () => [track]), getLyrics: vi.fn((_id, signal) => stalledRequest(signal)),
+    })
+    const fallback = stubProvider()
+    const provider = new TiramisuLyricsProvider({ primary, fallback, fetch: vi.fn() })
+    await provider.search(track.title)
+    const controller = new AbortController()
+    const request = provider.getLyrics(track.id, controller.signal)
+    controller.abort()
+    await expect(request).rejects.toMatchObject({ name: 'AbortError' })
+    expect(fallback.getLyrics).not.toHaveBeenCalled()
+  })
+})
+
+
+it('recovers an unavailable LrcMux source with the exact LRCLIB recording', async () => {
+  const metadata = { title: 'Invented Track', artist: 'Invented Artist', album: 'Invented Collection', duration: 238 }
+  const savedTrack = createLrcMuxTrackSummary(metadata)
+  const document = { ...inventedDocument('lrclib:512'), track: { ...inventedDocument('lrclib:512').track, durationSeconds: 238 } }
+  const primary = stubProvider({ search: vi.fn(async () => [document.track]), getLyrics: vi.fn(async () => document) })
+  const fallback = stubProvider({ getLyrics: vi.fn(async () => { throw new TypeError('Failed to fetch') }) })
+  const provider = new TiramisuLyricsProvider({ primary, fallback, fetch: vi.fn() })
+  await expect(provider.getLyrics(savedTrack.id)).resolves.toEqual(document)
+})
+
+
+it('keeps the original outage when the independent catalog has no match', async () => {
+  const track = inventedDocument('lrclib:512').track
+  const outage = new LrcLibRequestError(503)
+  const primary = stubProvider({ search: vi.fn(async () => [track]), getLyrics: vi.fn(async () => { throw outage }) })
+  const fallback = stubProvider({ getLyrics: vi.fn(async () => { throw new LrcMuxRequestError(404) }) })
+  const provider = new TiramisuLyricsProvider({ primary, fallback, fetch: vi.fn() })
+  await provider.search(track.title)
+  await expect(provider.getLyrics(track.id)).rejects.toBe(outage)
+})
+
+it('fits all three saved-link recovery deadlines inside the reader deadline', async () => {
+  const timeout = vi.spyOn(AbortSignal, 'timeout')
+  try {
+    const document = inventedDocument('lrclib:512')
+    const primary = stubProvider({ search: vi.fn(async () => [document.track]), getLyrics: vi.fn(async () => document) })
+    const fallback = stubProvider({ getLyrics: vi.fn(async () => { throw new LrcMuxRequestError(503) }) })
+    const provider = new TiramisuLyricsProvider({ primary, fallback, fetch: vi.fn() })
+    const track = createLrcMuxTrackSummary({ title: document.track.title, artist: document.track.artist })
+    await expect(provider.getLyrics(track.id)).resolves.toEqual(document)
+    expect(timeout).toHaveBeenCalledTimes(3)
+    expect(timeout.mock.calls.reduce((total, [duration]) => total + duration, 0)).toBeLessThan(20_000)
+  } finally { timeout.mockRestore() }
+})
+
+
+it('keeps the LrcMux outage when LRCLIB details disappear during recovery', async () => {
+  const track = inventedDocument('lrclib:512').track
+  const outage = new LrcMuxRequestError(503)
+  const primary = stubProvider({ search: vi.fn(async () => [track]), getLyrics: vi.fn(async () => { throw new LrcLibRequestError(404) }) })
+  const fallback = stubProvider({ getLyrics: vi.fn(async () => { throw outage }) })
+  const provider = new TiramisuLyricsProvider({ primary, fallback, fetch: vi.fn() })
+  const savedTrack = createLrcMuxTrackSummary({ title: track.title, artist: track.artist })
+  await expect(provider.getLyrics(savedTrack.id)).rejects.toBe(outage)
 })

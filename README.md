@@ -4,7 +4,7 @@ A mobile-first lyric lookup where semantic typography stays in the foreground an
 
 Search and lyric presentation are separate layers. The browser searches LRCLIB first, uses lyrics.ovh only for metadata discovery when needed, and resolves lyric documents through LRCLIB or LrcMux. Provider responses are normalized before they reach the reader, so the sources can change without redesigning the presentation.
 
-The three default searches are This Modern Love by Bloc Party, Melancholy by Driveways, and cbd by brakence. The featured This Modern Love entry uses a verified LRCLIB record. An old saved LrcMux link that returns 404 can recover through an exact title-and-artist LRCLIB match.
+The three default searches are This Modern Love by Bloc Party, Melancholy by Driveways, and cbd by brakence. The featured This Modern Love entry uses a verified LRCLIB record. Each source has a bounded request deadline so a stalled LRCLIB search cannot hide working metadata results. Selected LRCLIB tracks can recover through LrcMux using their search metadata; saved LrcMux links can recover through LRCLIB after missing-track or availability failures. Recovery requires matching title, artist, album, and duration when known, and does not retry restricted or cancelled requests.
 
 **[Open tiramisu](https://tiramisu.shin86.dev)**
 

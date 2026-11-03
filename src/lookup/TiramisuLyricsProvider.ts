@@ -9,12 +9,11 @@ import {
   createLrcMuxTrackSummary,
   decodeLrcMuxTrackMetadata,
   LrcMuxLyricsProvider,
-  LrcMuxRequestError,
   type LrcMuxTrackMetadata,
 } from './LrcMuxLyricsProvider'
 
 import { normalizeIdentity, sameRecording } from './recordingIdentity'
-import { RecordingMismatchError } from './lyricsFailure'
+import { classifyLyricsFailure, RecordingMismatchError } from './lyricsFailure'
 
 const SUGGEST_URL = 'https://api.lyrics.ovh/suggest/'
 const MAX_SUGGESTIONS = 12
@@ -46,6 +45,8 @@ export interface TiramisuLyricsProviderOptions {
   fallback?: LyricsProvider
   fetch?: typeof fetch
   suggestUrl?: string
+  /** Per-source deadline, leaving time to try an independent provider. */
+  timeoutMs?: number
 }
 
 /**
@@ -61,16 +62,22 @@ export class TiramisuLyricsProvider implements LyricsProvider {
   readonly #fallback: LyricsProvider
   readonly #fetch: typeof fetch
   readonly #suggestUrl: string
+  readonly #timeoutMs: number
+  readonly #knownTracks = new Map(TIRAMISU_DEFAULT_TRACKS.map((track) => [track.id, track]))
 
   constructor({
     primary = new LrcLibLyricsProvider(),
     fallback = new LrcMuxLyricsProvider(),
     fetch: fetchImplementation,
     suggestUrl = SUGGEST_URL,
+    // Three-hop saved-link recovery must fit inside the reader's 20s deadline.
+    timeoutMs = 6_000,
   }: TiramisuLyricsProviderOptions = {}) {
     const resolvedFetch = fetchImplementation ?? globalThis.fetch
     if (!resolvedFetch) throw new Error('Tiramisu lookup requires a fetch implementation.')
 
+    if (!Number.isInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 2 ** 32 - 1) throw new RangeError('Provider timeout must be a positive 32-bit integer.')
+    this.#timeoutMs = timeoutMs
     this.#primary = primary
     this.#fallback = fallback
     this.#fetch = fetchImplementation ?? resolvedFetch.bind(globalThis)
@@ -92,7 +99,7 @@ export class TiramisuLyricsProvider implements LyricsProvider {
       AbortSignal.timeout(5_000),
     ])
     const [primary, suggestions] = await Promise.allSettled([
-      this.#primary.search(normalizedQuery, signal, field),
+      this.#primary.search(normalizedQuery, this.#requestSignal(signal), field),
       this.#searchSuggestions(normalizedQuery, suggestSignal),
     ])
     if (signal?.aborted) throw new DOMException('Search was aborted.', 'AbortError')
@@ -102,6 +109,13 @@ export class TiramisuLyricsProvider implements LyricsProvider {
     if (primaryResults.length === 0 && suggestedResults.length === 0) {
       if (primary.status === 'rejected') throw primary.reason
       if (suggestions.status === 'rejected') throw suggestions.reason
+    }
+
+    // Keep metadata, not lyric text, for independent recovery of a selected ID.
+    // A bounded insertion-ordered cache also retains the previous search on Back.
+    for (const track of primaryResults) {
+      this.#knownTracks.set(track.id, track)
+      if (this.#knownTracks.size > 100) this.#knownTracks.delete(this.#knownTracks.keys().next().value!)
     }
 
     const additions = suggestedResults.filter((track) => !primaryResults.some((primary) => sameRecording(track, primary)))
@@ -122,27 +136,73 @@ export class TiramisuLyricsProvider implements LyricsProvider {
   }
 
   async getLyrics(id: string, signal?: AbortSignal): Promise<LyricDocument> {
-    if (id.startsWith('lrclib:')) return this.#primary.getLyrics(id, signal)
+    if (id.startsWith('lrclib:')) {
+      try {
+        return await this.#primary.getLyrics(id, this.#requestSignal(signal))
+      } catch (error) {
+        signal?.throwIfAborted()
+        const kind = classifyLyricsFailure(error).kind
+        const expected = this.#knownTracks.get(id)
+        if (!expected || (kind !== 'provider-unavailable' && kind !== 'not-found')) throw error
+
+        // Metadata from the selected search result lets the independent source
+        // verify the same recording. Never loosen album/version/duration checks.
+        const fallback = createLrcMuxTrackSummary({
+          title: expected.title,
+          artist: expected.artist,
+          album: expected.collection === 'Unknown album' ? undefined : expected.collection,
+          duration: expected.durationSeconds,
+        })
+        try {
+          const document = await this.#fallback.getLyrics(fallback.id, this.#requestSignal(signal))
+          signal?.throwIfAborted()
+          if (!sameRecording(expected, document.track)) throw new RecordingMismatchError()
+          return document
+        } catch (recoveryError) {
+          signal?.throwIfAborted()
+          // A miss in the backup catalog does not prove the unavailable source
+          // lacks this recording. Keep the original availability failure.
+          if (kind === 'provider-unavailable' && classifyLyricsFailure(recoveryError).kind === 'not-found') throw error
+          throw recoveryError
+        }
+      }
+    }
     if (id.startsWith('lrcmux:')) {
       try {
-        return await this.#fallback.getLyrics(id, signal)
+        return await this.#fallback.getLyrics(id, this.#requestSignal(signal))
       } catch (error) {
-        if (!(error instanceof LrcMuxRequestError) || error.status !== 404) throw error
+        signal?.throwIfAborted()
+        const kind = classifyLyricsFailure(error).kind
+        if (kind !== 'not-found' && kind !== 'provider-unavailable') throw error
 
-        // Old saved links can outlive a provider's catalog entry. Retry only an
-        // exact title-and-artist match so a different recording is not shown.
+        // Saved links can outlive a catalog entry or a source outage. Try the
+        // independent catalog without substituting a different recording.
         const metadata = decodeLrcMuxTrackMetadata(id)
-        const candidates = await this.#primary.search(`${metadata.title} ${metadata.artist}`, signal)
-        const expected = createLrcMuxTrackSummary(metadata)
-        const matches = candidates.filter((candidate) => sameRecording(expected, candidate))
-        if (matches.length > 1) throw new RecordingMismatchError()
-        if (matches.length === 0) throw error
-        const document = await this.#primary.getLyrics(matches[0].id, signal)
-        if (!sameRecording(expected, document.track)) throw new RecordingMismatchError()
-        return document
+        try {
+          const candidates = await this.#primary.search(`${metadata.title} ${metadata.artist}`, this.#requestSignal(signal))
+          const expected = createLrcMuxTrackSummary(metadata)
+          const matches = candidates.filter((candidate) => sameRecording(expected, candidate))
+          if (matches.length > 1) throw new RecordingMismatchError()
+          if (matches.length === 0) throw error
+          const document = await this.#primary.getLyrics(matches[0].id, this.#requestSignal(signal))
+          signal?.throwIfAborted()
+          if (!sameRecording(expected, document.track)) throw new RecordingMismatchError()
+          return document
+        } catch (recoveryError) {
+          signal?.throwIfAborted()
+          if (kind === 'provider-unavailable' && classifyLyricsFailure(recoveryError).kind === 'not-found') throw error
+          throw recoveryError
+        }
       }
     }
     throw new Error('Unknown lyrics source in track ID.')
+  }
+
+  #requestSignal(signal?: AbortSignal): AbortSignal {
+    return AbortSignal.any([
+      ...(signal ? [signal] : []),
+      AbortSignal.timeout(this.#timeoutMs),
+    ])
   }
 }
 
